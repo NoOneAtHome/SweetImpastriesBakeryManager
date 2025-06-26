@@ -41,6 +41,14 @@
         <a href="/api/sensors/history?sensor_id={{ sensor.sensor_id }}&time_slice=24h" class="btn" target="_blank">View API Data</a>
     </div>
     
+    <!-- Chart Container for Sensor Detail -->
+    {% if readings %}
+    <div style="margin-bottom: 2rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        <h3 style="margin-bottom: 1rem; color: #667eea;">{{ sensor.name }} - Historical Data</h3>
+        <canvas id="sensorDetailChart" width="400" height="200"></canvas>
+    </div>
+    {% endif %}
+    
     {% if readings %}
         <h3>Recent Readings (Last 24 Hours)</h3>
         <div style="overflow-x: auto;">

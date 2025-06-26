@@ -75,6 +75,13 @@
         </div>
     {% endif %}
     
+    <!-- Chart Container for Dashboard Overview -->
+    {% if sensors_data %}
+    <div style="margin-top: 2rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        <h3 style="margin-bottom: 1rem; color: #667eea;">Sensor Data Overview</h3>
+        <canvas id="dashboardChart" width="400" height="200"></canvas>
+    </div>
+    {% endif %}
     
     <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e1e5e9;">
         <h3>Manager Access</h3>
