@@ -380,6 +380,165 @@ def register_routes(app):
             response, status_code = handle_flask_error(e, "API /api/historical_data")
             return jsonify(response), status_code
 
+    @app.route('/api/multi_sensor_historical_data', methods=['GET'])
+    def get_multi_sensor_historical_data():
+        """
+        Get historical sensor data for multiple sensors within a time range.
+        
+        Query Parameters:
+            sensor_ids (str): Comma-separated list of sensor IDs (required)
+            start_time (str): Start time in ISO format (optional, defaults to 24 hours ago)
+            end_time (str): End time in ISO format (optional, defaults to now)
+            hourly_average (str): If 'true', return hourly averaged data (optional, defaults to false)
+            
+        Returns:
+            JSON response with historical sensor readings organized by sensor.
+            Structure: {
+                "sensor_id_1": {
+                    "name": "Sensor Name",
+                    "data": [{"timestamp": "...", "temperature": ..., "humidity": ...}, ...]
+                },
+                "sensor_id_2": {...}
+            }
+        """
+        try:
+            # Get query parameters
+            sensor_ids_str = request.args.get('sensor_ids')
+            start_time_str = request.args.get('start_time')
+            end_time_str = request.args.get('end_time')
+            hourly_average_str = request.args.get('hourly_average', 'false').lower()
+            hourly_average = hourly_average_str in ('true', '1', 'yes')
+            
+            log_info(f"Retrieving multi-sensor historical data for sensor_ids={sensor_ids_str}, start_time={start_time_str}, end_time={end_time_str}, hourly_average={hourly_average}", "API /api/multi_sensor_historical_data")
+            
+            # Validate required parameters
+            if not sensor_ids_str:
+                log_warning("Missing sensor_ids parameter", "API /api/multi_sensor_historical_data")
+                return jsonify({
+                    'success': False,
+                    'error': 'Missing required parameter: sensor_ids'
+                }), 400
+            
+            # Parse sensor IDs
+            sensor_ids = [sid.strip() for sid in sensor_ids_str.split(',') if sid.strip()]
+            if not sensor_ids:
+                log_warning("No valid sensor IDs provided", "API /api/multi_sensor_historical_data")
+                return jsonify({
+                    'success': False,
+                    'error': 'No valid sensor IDs provided'
+                }), 400
+            
+            # Set default time range (24 hours ago to now)
+            now = datetime.now(UTC)
+            default_start_time = now - timedelta(hours=24)
+            
+            # Parse start_time
+            if start_time_str:
+                try:
+                    start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                    if start_time.tzinfo is None:
+                        start_time = start_time.replace(tzinfo=UTC)
+                except ValueError:
+                    log_warning(f"Invalid start_time format: {start_time_str}", "API /api/multi_sensor_historical_data")
+                    return jsonify({
+                        'success': False,
+                        'error': 'Invalid start_time format. Use ISO format (e.g., 2025-01-01T12:00:00Z)'
+                    }), 400
+            else:
+                start_time = default_start_time
+            
+            # Parse end_time
+            if end_time_str:
+                try:
+                    end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+                    if end_time.tzinfo is None:
+                        end_time = end_time.replace(tzinfo=UTC)
+                except ValueError:
+                    log_warning(f"Invalid end_time format: {end_time_str}", "API /api/multi_sensor_historical_data")
+                    return jsonify({
+                        'success': False,
+                        'error': 'Invalid end_time format. Use ISO format (e.g., 2025-01-01T12:00:00Z)'
+                    }), 400
+            else:
+                end_time = now
+            
+            # Validate time range
+            if start_time >= end_time:
+                log_warning(f"Invalid time range: start_time ({start_time}) >= end_time ({end_time})", "API /api/multi_sensor_historical_data")
+                return jsonify({
+                    'success': False,
+                    'error': 'start_time must be before end_time'
+                }), 400
+            
+            result = {}
+            
+            with get_db_session_context() as session:
+                # Process each sensor
+                for sensor_id in sensor_ids:
+                    # Verify sensor exists
+                    sensor = session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+                    if not sensor:
+                        log_warning(f"Sensor not found: {sensor_id}", "API /api/multi_sensor_historical_data")
+                        continue  # Skip missing sensors instead of failing the entire request
+                    
+                    if hourly_average:
+                        # Get hourly averaged data using SQL aggregation
+                        readings = session.query(
+                            func.strftime('%Y-%m-%d %H:00:00', SensorReading.timestamp).label('hour'),
+                            func.avg(SensorReading.temperature).label('avg_temperature'),
+                            func.avg(SensorReading.humidity).label('avg_humidity')
+                        ).filter(and_(
+                            SensorReading.sensor_id == sensor_id,
+                            SensorReading.timestamp >= start_time,
+                            SensorReading.timestamp <= end_time
+                        )).group_by(
+                            func.strftime('%Y-%m-%d %H:00:00', SensorReading.timestamp)
+                        ).order_by(
+                            func.strftime('%Y-%m-%d %H:00:00', SensorReading.timestamp)
+                        ).all()
+                        
+                        # Format hourly averaged data
+                        historical_data = []
+                        for reading in readings:
+                            hour_datetime = datetime.strptime(reading.hour, '%Y-%m-%d %H:%M:%S').replace(tzinfo=UTC)
+                            historical_data.append({
+                                'timestamp': hour_datetime.isoformat(),
+                                'temperature': round(float(reading.avg_temperature), 2),
+                                'humidity': round(float(reading.avg_humidity), 2)
+                            })
+                    else:
+                        # Get raw historical readings within the time range
+                        readings = session.query(SensorReading)\
+                            .filter(and_(
+                                SensorReading.sensor_id == sensor_id,
+                                SensorReading.timestamp >= start_time,
+                                SensorReading.timestamp <= end_time
+                            ))\
+                            .order_by(SensorReading.timestamp)\
+                            .all()
+                        
+                        # Format response data
+                        historical_data = []
+                        for reading in readings:
+                            historical_data.append({
+                                'timestamp': reading.timestamp.isoformat(),
+                                'temperature': reading.temperature,
+                                'humidity': reading.humidity
+                            })
+                    
+                    # Add sensor data to result
+                    result[sensor_id] = {
+                        'name': sensor.name,
+                        'data': historical_data
+                    }
+                
+                log_info(f"Successfully retrieved multi-sensor historical data for {len(result)} sensors", "API /api/multi_sensor_historical_data")
+                return jsonify(result)
+                
+        except Exception as e:
+            response, status_code = handle_flask_error(e, "API /api/multi_sensor_historical_data")
+            return jsonify(response), status_code
+
 
 # Create Flask application instance
 app = create_app()

@@ -49,6 +49,46 @@ async function fetchHistoricalData(sensorId, startTime = null, endTime = null, h
 }
 
 /**
+ * Fetch historical data for multiple sensors from the backend API
+ * @param {Array} sensorIds - Array of sensor IDs to fetch data for
+ * @param {string} startTime - Start time in ISO format (optional)
+ * @param {string} endTime - End time in ISO format (optional)
+ * @param {boolean} hourlyAverage - Whether to return hourly averaged data (optional)
+ * @returns {Promise<Object>} Object with sensor data organized by sensor ID
+ */
+async function fetchMultiSensorHistoricalData(sensorIds, startTime = null, endTime = null, hourlyAverage = false) {
+    try {
+        let url = `/api/multi_sensor_historical_data?sensor_ids=${encodeURIComponent(sensorIds.join(','))}`;
+        
+        if (startTime) {
+            url += `&start_time=${encodeURIComponent(startTime)}`;
+        }
+        if (endTime) {
+            url += `&end_time=${encodeURIComponent(endTime)}`;
+        }
+        if (hourlyAverage) {
+            url += `&hourly_average=true`;
+        }
+        
+        console.log(`Fetching multi-sensor data from: ${url}`);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log(`Fetched data for ${Object.keys(data).length} sensors`);
+        
+        return data;
+    } catch (error) {
+        console.error('Error fetching multi-sensor historical data:', error);
+        throw error;
+    }
+}
+
+/**
  * Calculate time range based on time slice selection
  * @param {string} timeSlice - Time slice ('last_hour', 'today', '4h', '8h', '12h', '24h', '7d', '30d')
  * @returns {Object} Object with startTime and endTime in ISO format
@@ -115,29 +155,116 @@ function processDataForChart(rawData) {
 }
 
 /**
+ * Define color palette for multiple sensor lines
+ */
+const SENSOR_COLORS = [
+    '#007e15',  // Green (original color)
+    '#dc3545',  // Red
+    '#007bff',  // Blue
+    '#fd7e14',  // Orange
+    '#6f42c1',  // Purple
+    '#20c997',  // Teal
+    '#e83e8c',  // Pink
+    '#6c757d',  // Gray
+    '#28a745',  // Success green
+    '#17a2b8',  // Info blue
+    '#ffc107',  // Warning yellow
+    '#343a40'   // Dark gray
+];
+
+/**
+ * Process multi-sensor data into Chart.js format
+ * @param {Object} multiSensorData - Data from multi-sensor API organized by sensor ID
+ * @returns {Object} Processed data for Chart.js with multiple datasets
+ */
+function processMultiSensorDataForChart(multiSensorData) {
+    const datasets = [];
+    const allTimestamps = new Set();
+    
+    // Collect all unique timestamps across all sensors
+    Object.values(multiSensorData).forEach(sensorInfo => {
+        sensorInfo.data.forEach(reading => {
+            allTimestamps.add(reading.timestamp);
+        });
+    });
+    
+    // Sort timestamps
+    const sortedTimestamps = Array.from(allTimestamps).sort().map(ts => new Date(ts));
+    
+    // Create a dataset for each sensor
+    let colorIndex = 0;
+    Object.entries(multiSensorData).forEach(([sensorId, sensorInfo]) => {
+        const color = SENSOR_COLORS[colorIndex % SENSOR_COLORS.length];
+        
+        // Create data points array with proper x,y format for Chart.js
+        const dataPoints = sensorInfo.data.map(reading => ({
+            x: new Date(reading.timestamp),
+            y: reading.temperature
+        }));
+        
+        // Convert hex color to rgba for background
+        const hexToRgba = (hex, alpha) => {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        };
+        
+        datasets.push({
+            label: sensorInfo.name || sensorId,
+            data: dataPoints,
+            borderColor: color,
+            backgroundColor: hexToRgba(color, 0.1),
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1,
+            yAxisID: 'y'
+        });
+        
+        colorIndex++;
+    });
+    
+    return {
+        labels: sortedTimestamps,
+        datasets: datasets
+    };
+}
+
+/**
  * Create Chart.js configuration for sensor data
- * @param {Object} processedData - Processed data from processDataForChart
+ * @param {Object} processedData - Processed data from processDataForChart or processMultiSensorDataForChart
  * @param {string} title - Chart title
  * @param {boolean} hourlyAverage - Whether the data is hourly averaged
+ * @param {boolean} isMultiSensor - Whether this is multi-sensor data (optional)
  * @returns {Object} Chart.js configuration object
  */
-function createChartConfig(processedData, title, hourlyAverage = false) {
+function createChartConfig(processedData, title, hourlyAverage = false, isMultiSensor = false) {
+    // Handle both single sensor and multi-sensor data formats
+    let datasets;
+    if (isMultiSensor || Array.isArray(processedData.datasets)) {
+        // Multi-sensor data - datasets are already prepared
+        datasets = processedData.datasets;
+    } else {
+        // Single sensor data - create single dataset
+        datasets = [
+            {
+                label: 'Temperature (°C)',
+                data: processedData.temperatureData,
+                borderColor: '#007e15',
+                backgroundColor: 'rgba(0, 126, 21, 0.1)',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1,
+                yAxisID: 'y'
+            }
+        ];
+    }
+    
     return {
         type: 'line',
         data: {
             labels: processedData.labels,
-            datasets: [
-                {
-                    label: 'Temperature (°C)',
-                    data: processedData.temperatureData,
-                    borderColor: '#007e15',
-                    backgroundColor: 'rgba(0, 126, 21, 0.1)',
-                    borderWidth: 2,
-                    fill: false,
-                    tension: 0.1,
-                    yAxisID: 'y'
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true,
@@ -350,8 +477,9 @@ function resetChartZoom(canvasId) {
  * Render dashboard overview chart with data from multiple sensors
  * @param {Array} sensorIds - Array of sensor IDs to include
  * @param {string} timeSlice - Time slice for data range
+ * @param {boolean} hourlyAverage - Whether to display hourly averaged data
  */
-async function renderDashboardChart(sensorIds, timeSlice = '24h') {
+async function renderDashboardChart(sensorIds, timeSlice = '24h', hourlyAverage = false) {
     try {
         const canvas = document.getElementById('dashboardChart');
         if (!canvas) {
@@ -359,14 +487,78 @@ async function renderDashboardChart(sensorIds, timeSlice = '24h') {
             return;
         }
         
-        // For now, just render the first sensor's data
-        // In the future, this could be enhanced to show multiple sensors
-        if (sensorIds && sensorIds.length > 0) {
-            await renderSensorChart('dashboardChart', sensorIds[0], timeSlice, 'Sensor Overview - Last 24 Hours');
+        // Show loading state
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#f0f0f0';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#666';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Loading chart data...', canvas.width / 2, canvas.height / 2);
+        
+        if (!sensorIds || sensorIds.length === 0) {
+            console.warn('No sensor IDs provided for dashboard chart');
+            return;
         }
+        
+        // Calculate time range
+        const timeRange = calculateTimeRange(timeSlice);
+        
+        // Fetch data for all sensors
+        const multiSensorData = await fetchMultiSensorHistoricalData(
+            sensorIds,
+            timeRange.startTime,
+            timeRange.endTime,
+            hourlyAverage
+        );
+        
+        if (Object.keys(multiSensorData).length === 0) {
+            // Show no data message
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#999';
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('No data available for the selected sensors and time range', canvas.width / 2, canvas.height / 2);
+            return;
+        }
+        
+        // Process data for chart
+        const processedData = processMultiSensorDataForChart(multiSensorData);
+        
+        // Create chart title
+        const timeLabel = getTimeSliceLabel(timeSlice);
+        const title = `Sensor Overview - ${timeLabel}${hourlyAverage ? ' (Hourly Average)' : ''}`;
+        
+        // Create chart configuration
+        const config = createChartConfig(processedData, title, hourlyAverage, true);
+        
+        // Destroy existing chart if it exists
+        if (dashboardChart) {
+            dashboardChart.destroy();
+        }
+        
+        // Create new chart
+        dashboardChart = new Chart(ctx, config);
+        
+        console.log(`Multi-sensor dashboard chart rendered successfully with ${Object.keys(multiSensorData).length} sensors`);
         
     } catch (error) {
         console.error('Error rendering dashboard chart:', error);
+        
+        // Show error message on canvas
+        const canvas = document.getElementById('dashboardChart');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#f8d7da';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#721c24';
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Error loading chart data', canvas.width / 2, canvas.height / 2);
+        }
     }
 }
 
@@ -405,3 +597,5 @@ window.renderSensorChart = renderSensorChart;
 window.renderDashboardChart = renderDashboardChart;
 window.handleTimeSliceChange = handleTimeSliceChange;
 window.fetchHistoricalData = fetchHistoricalData;
+window.fetchMultiSensorHistoricalData = fetchMultiSensorHistoricalData;
+window.processMultiSensorDataForChart = processMultiSensorDataForChart;

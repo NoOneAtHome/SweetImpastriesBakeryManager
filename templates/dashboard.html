@@ -144,8 +144,12 @@
 // Dashboard chart functionality
 let currentDashboardTimeSlice = '24h';
 
-// Get the first sensor ID for the dashboard chart
-const firstSensorId = '{{ sensors_data[0].sensor.sensor_id }}';
+// Get all sensor IDs for the dashboard chart
+const allSensorIds = [
+    {% for sensor_data in sensors_data %}
+    '{{ sensor_data.sensor.sensor_id }}'{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
 
 function updateDashboardChart(timeSlice) {
     currentDashboardTimeSlice = timeSlice;
@@ -160,9 +164,8 @@ function updateDashboardChart(timeSlice) {
     const hourlyAverageCheckbox = document.getElementById('hourlyAverageCheckbox');
     const hourlyAverage = hourlyAverageCheckbox ? hourlyAverageCheckbox.checked : false;
     
-    // Render chart with new time slice and hourly average setting
-    const title = 'Sensor Overview - ' + getTimeSliceLabel(timeSlice) + (hourlyAverage ? ' (Hourly Average)' : '');
-    renderSensorChart('dashboardChart', firstSensorId, timeSlice, title, hourlyAverage);
+    // Render multi-sensor dashboard chart
+    renderDashboardChart(allSensorIds, timeSlice, hourlyAverage);
 }
 
 function handleHourlyAverageChange() {
