@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 from flask import Flask, jsonify, request, render_template, redirect, url_for, session, flash
 from flask_session import Session as FlaskSession
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_
+from sqlalchemy import desc, and_, func
 from config import get_config, TestingConfig # Import TestingConfig
 from database import get_db_session_context
 from models import Sensor, SensorReading
@@ -241,18 +241,22 @@ def register_routes(app):
             sensor_id (str): ID of the sensor to get data for (required)
             start_time (str): Start time in ISO format (optional, defaults to 24 hours ago)
             end_time (str): End time in ISO format (optional, defaults to now)
+            hourly_average (str): If 'true', return hourly averaged data (optional, defaults to false)
             
         Returns:
             JSON response with historical sensor readings as an array of objects.
             Each object contains timestamp, temperature, and humidity.
+            If hourly_average is true, data is grouped and averaged by hour.
         """
         try:
             # Get query parameters
             sensor_id = request.args.get('sensor_id')
             start_time_str = request.args.get('start_time')
             end_time_str = request.args.get('end_time')
+            hourly_average_str = request.args.get('hourly_average', 'false').lower()
+            hourly_average = hourly_average_str in ('true', '1', 'yes')
             
-            log_info(f"Retrieving historical data for sensor_id={sensor_id}, start_time={start_time_str}, end_time={end_time_str}", "API /api/historical_data")
+            log_info(f"Retrieving historical data for sensor_id={sensor_id}, start_time={start_time_str}, end_time={end_time_str}, hourly_average={hourly_average}", "API /api/historical_data")
             
             # Validate required parameters
             if not sensor_id:
@@ -316,24 +320,50 @@ def register_routes(app):
                         'error': f'Sensor not found: {sensor_id}'
                     }), 404
                 
-                # Get historical readings within the time range
-                readings = session.query(SensorReading)\
-                    .filter(and_(
+                if hourly_average:
+                    # Get hourly averaged data using SQL aggregation
+                    # Group by hour and calculate averages
+                    readings = session.query(
+                        func.date_trunc('hour', SensorReading.timestamp).label('hour'),
+                        func.avg(SensorReading.temperature).label('avg_temperature'),
+                        func.avg(SensorReading.humidity).label('avg_humidity')
+                    ).filter(and_(
                         SensorReading.sensor_id == sensor_id,
                         SensorReading.timestamp >= start_time,
                         SensorReading.timestamp <= end_time
-                    ))\
-                    .order_by(SensorReading.timestamp)\
-                    .all()
-                
-                # Format response data as simple array of objects
-                historical_data = []
-                for reading in readings:
-                    historical_data.append({
-                        'timestamp': reading.timestamp.isoformat(),
-                        'temperature': reading.temperature,
-                        'humidity': reading.humidity
-                    })
+                    )).group_by(
+                        func.date_trunc('hour', SensorReading.timestamp)
+                    ).order_by(
+                        func.date_trunc('hour', SensorReading.timestamp)
+                    ).all()
+                    
+                    # Format hourly averaged data
+                    historical_data = []
+                    for reading in readings:
+                        historical_data.append({
+                            'timestamp': reading.hour.isoformat(),
+                            'temperature': round(float(reading.avg_temperature), 2),
+                            'humidity': round(float(reading.avg_humidity), 2)
+                        })
+                else:
+                    # Get raw historical readings within the time range
+                    readings = session.query(SensorReading)\
+                        .filter(and_(
+                            SensorReading.sensor_id == sensor_id,
+                            SensorReading.timestamp >= start_time,
+                            SensorReading.timestamp <= end_time
+                        ))\
+                        .order_by(SensorReading.timestamp)\
+                        .all()
+                    
+                    # Format response data as simple array of objects
+                    historical_data = []
+                    for reading in readings:
+                        historical_data.append({
+                            'timestamp': reading.timestamp.isoformat(),
+                            'temperature': reading.temperature,
+                            'humidity': reading.humidity
+                        })
                 
                 log_info(f"Successfully retrieved {len(historical_data)} historical readings for sensor {sensor_id}", "API /api/historical_data")
                 
@@ -411,6 +441,9 @@ def get_time_filter(time_slice):
     time_slice_map = {
         'last_hour': now - timedelta(hours=1),
         'today': now.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=UTC),
+        '4h': now - timedelta(hours=4),
+        '8h': now - timedelta(hours=8),
+        '12h': now - timedelta(hours=12),
         '24h': now - timedelta(hours=24),
         '7d': now - timedelta(days=7),
         '30d': now - timedelta(days=30)

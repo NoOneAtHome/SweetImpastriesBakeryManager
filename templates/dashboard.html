@@ -11,13 +11,21 @@
     <div style="margin-bottom: 1rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
             <h3 style="color: #667eea; margin: 0;">Sensor Data Overview</h3>
-            <div class="time-slice-controls">
-                <button class="time-slice-btn" data-slice="4h" onclick="updateDashboardChart('4h')">4h</button>
-                <button class="time-slice-btn" data-slice="8h" onclick="updateDashboardChart('8h')">8h</button>
-                <button class="time-slice-btn" data-slice="12h" onclick="updateDashboardChart('12h')">12h</button>
-                <button class="time-slice-btn active" data-slice="24h" onclick="updateDashboardChart('24h')">24h</button>
-                <button class="time-slice-btn" data-slice="7d" onclick="updateDashboardChart('7d')">7d</button>
-                <button class="time-slice-btn" data-slice="30d" onclick="updateDashboardChart('30d')">30d</button>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div class="hourly-average-control">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: #667eea; cursor: pointer;">
+                        <input type="checkbox" id="hourlyAverageCheckbox" style="cursor: pointer;">
+                        <span>Average over hour</span>
+                    </label>
+                </div>
+                <div class="time-slice-controls">
+                    <button class="time-slice-btn" data-slice="4h" onclick="updateDashboardChart('4h')">4h</button>
+                    <button class="time-slice-btn" data-slice="8h" onclick="updateDashboardChart('8h')">8h</button>
+                    <button class="time-slice-btn" data-slice="12h" onclick="updateDashboardChart('12h')">12h</button>
+                    <button class="time-slice-btn active" data-slice="24h" onclick="updateDashboardChart('24h')">24h</button>
+                    <button class="time-slice-btn" data-slice="7d" onclick="updateDashboardChart('7d')">7d</button>
+                    <button class="time-slice-btn" data-slice="30d" onclick="updateDashboardChart('30d')">30d</button>
+                </div>
             </div>
         </div>
         <div style="height: 400px;">
@@ -148,14 +156,30 @@ function updateDashboardChart(timeSlice) {
     });
     document.querySelector('[data-slice="' + timeSlice + '"]').classList.add('active');
     
-    // Render chart with new time slice
-    const title = 'Sensor Overview - ' + getTimeSliceLabel(timeSlice);
-    renderSensorChart('dashboardChart', firstSensorId, timeSlice, title);
+    // Get hourly average checkbox state
+    const hourlyAverageCheckbox = document.getElementById('hourlyAverageCheckbox');
+    const hourlyAverage = hourlyAverageCheckbox ? hourlyAverageCheckbox.checked : false;
+    
+    // Render chart with new time slice and hourly average setting
+    const title = 'Sensor Overview - ' + getTimeSliceLabel(timeSlice) + (hourlyAverage ? ' (Hourly Average)' : '');
+    renderSensorChart('dashboardChart', firstSensorId, timeSlice, title, hourlyAverage);
+}
+
+function handleHourlyAverageChange() {
+    // Re-render chart when checkbox state changes
+    updateDashboardChart(currentDashboardTimeSlice);
 }
 
 // Initialize dashboard chart when page loads
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Initializing dashboard chart...');
+    
+    // Add event listener to hourly average checkbox
+    const hourlyAverageCheckbox = document.getElementById('hourlyAverageCheckbox');
+    if (hourlyAverageCheckbox) {
+        hourlyAverageCheckbox.addEventListener('change', handleHourlyAverageChange);
+    }
+    
     updateDashboardChart('24h');
 });
 </script>

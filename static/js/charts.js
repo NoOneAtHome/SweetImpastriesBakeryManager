@@ -13,9 +13,10 @@ let sensorDetailChart = null;
  * @param {string} sensorId - The sensor ID to fetch data for
  * @param {string} startTime - Start time in ISO format (optional)
  * @param {string} endTime - End time in ISO format (optional)
+ * @param {boolean} hourlyAverage - Whether to return hourly averaged data (optional)
  * @returns {Promise<Array>} Array of sensor readings
  */
-async function fetchHistoricalData(sensorId, startTime = null, endTime = null) {
+async function fetchHistoricalData(sensorId, startTime = null, endTime = null, hourlyAverage = false) {
     try {
         let url = `/api/historical_data?sensor_id=${encodeURIComponent(sensorId)}`;
         
@@ -24,6 +25,9 @@ async function fetchHistoricalData(sensorId, startTime = null, endTime = null) {
         }
         if (endTime) {
             url += `&end_time=${encodeURIComponent(endTime)}`;
+        }
+        if (hourlyAverage) {
+            url += `&hourly_average=true`;
         }
         
         console.log(`Fetching data from: ${url}`);
@@ -46,7 +50,7 @@ async function fetchHistoricalData(sensorId, startTime = null, endTime = null) {
 
 /**
  * Calculate time range based on time slice selection
- * @param {string} timeSlice - Time slice ('last_hour', 'today', '24h', '7d', '30d')
+ * @param {string} timeSlice - Time slice ('last_hour', 'today', '4h', '8h', '12h', '24h', '7d', '30d')
  * @returns {Object} Object with startTime and endTime in ISO format
  */
 function calculateTimeRange(timeSlice) {
@@ -60,6 +64,15 @@ function calculateTimeRange(timeSlice) {
         case 'today':
             startTime = new Date(now);
             startTime.setHours(0, 0, 0, 0); // Start of today
+            break;
+        case '4h':
+            startTime = new Date(now.getTime() - (4 * 60 * 60 * 1000)); // 4 hours ago
+            break;
+        case '8h':
+            startTime = new Date(now.getTime() - (8 * 60 * 60 * 1000)); // 8 hours ago
+            break;
+        case '12h':
+            startTime = new Date(now.getTime() - (12 * 60 * 60 * 1000)); // 12 hours ago
             break;
         case '24h':
             startTime = new Date(now.getTime() - (24 * 60 * 60 * 1000)); // 24 hours ago
@@ -173,6 +186,23 @@ function createChartConfig(processedData, title) {
                             }
                         }
                     }
+                },
+                zoom: {
+                    zoom: {
+                        wheel: {
+                            enabled: true,
+                        },
+                        pinch: {
+                            enabled: true
+                        },
+                        mode: 'xy',
+                        scaleMode: 'xy'
+                    },
+                    pan: {
+                        enabled: true,
+                        mode: 'xy',
+                        scaleMode: 'xy'
+                    }
                 }
             },
             scales: {
@@ -233,8 +263,9 @@ function createChartConfig(processedData, title) {
  * @param {string} sensorId - Sensor ID to fetch data for
  * @param {string} timeSlice - Time slice for data range
  * @param {string} title - Chart title
+ * @param {boolean} hourlyAverage - Whether to display hourly averaged data
  */
-async function renderSensorChart(canvasId, sensorId, timeSlice = '24h', title = 'Sensor Data') {
+async function renderSensorChart(canvasId, sensorId, timeSlice = '24h', title = 'Sensor Data', hourlyAverage = false) {
     try {
         const canvas = document.getElementById(canvasId);
         if (!canvas) {
@@ -255,7 +286,7 @@ async function renderSensorChart(canvasId, sensorId, timeSlice = '24h', title = 
         const timeRange = calculateTimeRange(timeSlice);
         
         // Fetch data
-        const rawData = await fetchHistoricalData(sensorId, timeRange.startTime, timeRange.endTime);
+        const rawData = await fetchHistoricalData(sensorId, timeRange.startTime, timeRange.endTime, hourlyAverage);
         
         if (rawData.length === 0) {
             // Show no data message
@@ -310,6 +341,27 @@ async function renderSensorChart(canvasId, sensorId, timeSlice = '24h', title = 
             ctx.fillText('Error loading chart data', canvas.width / 2, canvas.height / 2);
         }
     }
+/**
+ * Reset zoom on a chart
+ * @param {string} canvasId - ID of the canvas element
+ */
+function resetChartZoom(canvasId) {
+    let chart = null;
+    
+    if (canvasId === 'dashboardChart' && dashboardChart) {
+        chart = dashboardChart;
+    } else if (canvasId === 'sensorDetailChart' && sensorDetailChart) {
+        chart = sensorDetailChart;
+    }
+    
+    if (chart && chart.resetZoom) {
+        chart.resetZoom();
+        console.log(`Zoom reset for chart: ${canvasId}`);
+    } else {
+        console.warn(`Chart not found or resetZoom not available for: ${canvasId}`);
+    }
+}
+
 }
 
 /**
@@ -356,6 +408,9 @@ function getTimeSliceLabel(timeSlice) {
     const labels = {
         'last_hour': 'Last Hour',
         'today': 'Today',
+        '4h': 'Last 4 Hours',
+        '8h': 'Last 8 Hours',
+        '12h': 'Last 12 Hours',
         '24h': 'Last 24 Hours',
         '7d': 'Last 7 Days',
         '30d': 'Last 30 Days'
