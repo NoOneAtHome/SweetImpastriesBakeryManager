@@ -115,6 +115,96 @@ class TestWebDatabaseIntegration:
         assert data['success'] is False
         assert 'Invalid time_slice' in data['error']
     
+    def test_historical_data_api_endpoint_with_database(self, populated_test_db, flask_client):
+        """Test /api/historical_data endpoint with real database data."""
+        # Test with default time range (24 hours)
+        response = flask_client.get('/api/historical_data?sensor_id=TEST_SENSOR_001')
+        
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        
+        # Should return an array of objects
+        assert isinstance(data, list)
+        if len(data) > 0:
+            # Verify data structure
+            reading = data[0]
+            assert 'timestamp' in reading
+            assert 'temperature' in reading
+            assert 'humidity' in reading
+    
+    def test_historical_data_api_with_time_range(self, populated_test_db, flask_client):
+        """Test /api/historical_data endpoint with specific time range."""
+        # Use a specific time range
+        start_time = '2025-01-01T00:00:00Z'
+        end_time = '2025-01-02T00:00:00Z'
+        
+        response = flask_client.get(f'/api/historical_data?sensor_id=TEST_SENSOR_001&start_time={start_time}&end_time={end_time}')
+        
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        
+        # Should return an array
+        assert isinstance(data, list)
+        # Data might be empty if no readings in that time range, which is valid
+    
+    def test_historical_data_api_invalid_sensor(self, populated_test_db, flask_client):
+        """Test /api/historical_data endpoint with invalid sensor ID."""
+        response = flask_client.get('/api/historical_data?sensor_id=INVALID_SENSOR')
+        
+        assert response.status_code == 404
+        data = json.loads(response.data)
+        
+        assert data['success'] is False
+        assert 'Sensor not found' in data['error']
+    
+    def test_historical_data_api_missing_sensor_id(self, populated_test_db, flask_client):
+        """Test /api/historical_data endpoint with missing sensor_id parameter."""
+        response = flask_client.get('/api/historical_data')
+        
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        
+        assert data['success'] is False
+        assert 'Missing required parameter: sensor_id' in data['error']
+    
+    def test_historical_data_api_invalid_time_format(self, populated_test_db, flask_client):
+        """Test /api/historical_data endpoint with invalid time format."""
+        response = flask_client.get('/api/historical_data?sensor_id=TEST_SENSOR_001&start_time=invalid-time')
+        
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        
+        assert data['success'] is False
+        assert 'Invalid start_time format' in data['error']
+    
+    def test_historical_data_api_invalid_time_range(self, populated_test_db, flask_client):
+        """Test /api/historical_data endpoint with invalid time range (start >= end)."""
+        start_time = '2025-01-02T00:00:00Z'
+        end_time = '2025-01-01T00:00:00Z'  # End before start
+        
+        response = flask_client.get(f'/api/historical_data?sensor_id=TEST_SENSOR_001&start_time={start_time}&end_time={end_time}')
+        
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        
+        assert data['success'] is False
+        assert 'start_time must be before end_time' in data['error']
+    
+    def test_historical_data_api_no_data_found(self, populated_test_db, flask_client):
+        """Test /api/historical_data endpoint when no data is found."""
+        # Use a time range in the far future where no data exists
+        start_time = '2030-01-01T00:00:00Z'
+        end_time = '2030-01-02T00:00:00Z'
+        
+        response = flask_client.get(f'/api/historical_data?sensor_id=TEST_SENSOR_001&start_time={start_time}&end_time={end_time}')
+        
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        
+        # Should return empty array when no data found
+        assert isinstance(data, list)
+        assert len(data) == 0
+    
     def test_dashboard_web_interface_with_database(self, populated_test_db, flask_client):
         """Test dashboard web interface with real database data."""
         response = flask_client.get('/')

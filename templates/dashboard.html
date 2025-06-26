@@ -78,8 +78,17 @@
     <!-- Chart Container for Dashboard Overview -->
     {% if sensors_data %}
     <div style="margin-top: 2rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-        <h3 style="margin-bottom: 1rem; color: #667eea;">Sensor Data Overview</h3>
-        <canvas id="dashboardChart" width="400" height="200"></canvas>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="color: #667eea; margin: 0;">Sensor Data Overview</h3>
+            <div class="time-slice-controls">
+                <button class="time-slice-btn active" data-slice="24h" onclick="updateDashboardChart('24h')">24h</button>
+                <button class="time-slice-btn" data-slice="7d" onclick="updateDashboardChart('7d')">7d</button>
+                <button class="time-slice-btn" data-slice="30d" onclick="updateDashboardChart('30d')">30d</button>
+            </div>
+        </div>
+        <div style="height: 400px;">
+            <canvas id="dashboardChart"></canvas>
+        </div>
     </div>
     {% endif %}
     
@@ -89,4 +98,63 @@
         <a href="{{ url_for('manager_login') }}" class="btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin-top: 0.5rem;">Manager Login</a>
     </div>
 </div>
+
+<style>
+.time-slice-controls {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.time-slice-btn {
+    padding: 0.5rem 1rem;
+    border: 2px solid #667eea;
+    background: white;
+    color: #667eea;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.time-slice-btn:hover {
+    background: #667eea;
+    color: white;
+}
+
+.time-slice-btn.active {
+    background: #667eea;
+    color: white;
+}
+</style>
+
+{% if sensors_data %}
+<script>
+// Dashboard chart functionality
+let currentDashboardTimeSlice = '24h';
+
+// Get the first sensor ID for the dashboard chart
+const firstSensorId = '{{ sensors_data[0].sensor.sensor_id }}';
+
+function updateDashboardChart(timeSlice) {
+    currentDashboardTimeSlice = timeSlice;
+    
+    // Update button states
+    document.querySelectorAll('.time-slice-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelector('[data-slice="' + timeSlice + '"]').classList.add('active');
+    
+    // Render chart with new time slice
+    const title = 'Sensor Overview - ' + getTimeSliceLabel(timeSlice);
+    renderSensorChart('dashboardChart', firstSensorId, timeSlice, title);
+}
+
+// Initialize dashboard chart when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Initializing dashboard chart...');
+    updateDashboardChart('24h');
+});
+</script>
+{% endif %}
 {% endblock %}

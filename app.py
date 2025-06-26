@@ -79,7 +79,274 @@ def create_app(config_name=None):
         # Format and return as string
         return local_time.strftime('%Y-%m-%d %H:%M:%S')
     
+    # Register routes on this app instance
+    register_routes(app)
+    
     return app
+
+
+def register_routes(app):
+    """Register all routes on the given Flask app instance."""
+    
+    @app.route('/api/sensors', methods=['GET'])
+    def get_sensors():
+        """
+        Get all configured sensors.
+        
+        Returns:
+            JSON response with list of all sensors including their configuration.
+        """
+        try:
+            log_info("Retrieving all sensors", "API /api/sensors")
+            
+            with get_db_session_context() as session:
+                sensors = session.query(Sensor).all()
+                
+                log_info(f"Successfully retrieved {len(sensors)} sensors", "API /api/sensors")
+                return jsonify({
+                    'success': True,
+                    'data': [serialize_sensor(sensor) for sensor in sensors],
+                    'count': len(sensors)
+                })
+                
+        except Exception as e:
+            response, status_code = handle_flask_error(e, "API /api/sensors")
+            return jsonify(response), status_code
+
+    @app.route('/api/sensors/latest', methods=['GET'])
+    def get_latest_readings():
+        """
+        Get the latest reading for each active sensor.
+        
+        Returns:
+            JSON response with latest readings for all active sensors.
+        """
+        try:
+            log_info("Retrieving latest sensor readings", "API /api/sensors/latest")
+            
+            with get_db_session_context() as session:
+                # Get all active sensors
+                active_sensors = session.query(Sensor).filter(Sensor.active == True).all()
+                
+                latest_readings = []
+                
+                for sensor in active_sensors:
+                    # Get the latest reading for this sensor
+                    latest_reading = session.query(SensorReading)\
+                        .filter(SensorReading.sensor_id == sensor.sensor_id)\
+                        .order_by(desc(SensorReading.timestamp))\
+                        .first()
+                    
+                    if latest_reading:
+                        reading_data = serialize_sensor_reading(latest_reading)
+                        reading_data['sensor_name'] = sensor.name
+                        latest_readings.append(reading_data)
+                
+                log_info(f"Successfully retrieved latest readings for {len(latest_readings)} sensors", "API /api/sensors/latest")
+                return jsonify({
+                    'success': True,
+                    'data': latest_readings,
+                    'count': len(latest_readings)
+                })
+                
+        except Exception as e:
+            response, status_code = handle_flask_error(e, "API /api/sensors/latest")
+            return jsonify(response), status_code
+
+    @app.route('/api/sensors/history', methods=['GET'])
+    def get_sensor_history():
+        """
+        Get historical data for a specified sensor and time slice.
+        
+        Query Parameters:
+            sensor_id (str): ID of the sensor to get history for
+            time_slice (str): Time period ('last_hour', 'today', '24h', '7d', '30d')
+            
+        Returns:
+            JSON response with historical sensor readings.
+        """
+        try:
+            # Get query parameters
+            sensor_id = request.args.get('sensor_id')
+            time_slice = request.args.get('time_slice')
+            
+            log_info(f"Retrieving sensor history for sensor_id={sensor_id}, time_slice={time_slice}", "API /api/sensors/history")
+            
+            # Validate required parameters
+            if not sensor_id:
+                log_warning("Missing sensor_id parameter", "API /api/sensors/history")
+                return jsonify({
+                    'success': False,
+                    'error': 'Missing required parameter: sensor_id'
+                }), 400
+                
+            if not time_slice:
+                log_warning("Missing time_slice parameter", "API /api/sensors/history")
+                return jsonify({
+                    'success': False,
+                    'error': 'Missing required parameter: time_slice'
+                }), 400
+            
+            # Validate time_slice
+            try:
+                start_time = get_time_filter(time_slice)
+            except ValueError as e:
+                log_warning(f"Invalid time_slice parameter: {time_slice}", "API /api/sensors/history")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 400
+            
+            with get_db_session_context() as session:
+                # Verify sensor exists
+                sensor = session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+                if not sensor:
+                    log_warning(f"Sensor not found: {sensor_id}", "API /api/sensors/history")
+                    return jsonify({
+                        'success': False,
+                        'error': f'Sensor not found: {sensor_id}'
+                    }), 404
+                
+                # Get historical readings
+                readings = session.query(SensorReading)\
+                    .filter(and_(
+                        SensorReading.sensor_id == sensor_id,
+                        SensorReading.timestamp >= start_time
+                    ))\
+                    .order_by(desc(SensorReading.timestamp))\
+                    .all()
+                
+                log_info(f"Successfully retrieved {len(readings)} historical readings for sensor {sensor_id}", "API /api/sensors/history")
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'sensor': serialize_sensor(sensor),
+                        'readings': [serialize_sensor_reading(reading) for reading in readings],
+                        'time_slice': time_slice,
+                        'start_time': start_time.isoformat(),
+                        'count': len(readings)
+                    }
+                })
+                
+        except Exception as e:
+            response, status_code = handle_flask_error(e, "API /api/sensors/history")
+            return jsonify(response), status_code
+
+    @app.route('/api/historical_data', methods=['GET'])
+    def get_historical_data():
+        """
+        Get historical sensor data for a specified sensor within a time range.
+        
+        Query Parameters:
+            sensor_id (str): ID of the sensor to get data for (required)
+            start_time (str): Start time in ISO format (optional, defaults to 24 hours ago)
+            end_time (str): End time in ISO format (optional, defaults to now)
+            
+        Returns:
+            JSON response with historical sensor readings as an array of objects.
+            Each object contains timestamp, temperature, and humidity.
+        """
+        try:
+            # Get query parameters
+            sensor_id = request.args.get('sensor_id')
+            start_time_str = request.args.get('start_time')
+            end_time_str = request.args.get('end_time')
+            
+            log_info(f"Retrieving historical data for sensor_id={sensor_id}, start_time={start_time_str}, end_time={end_time_str}", "API /api/historical_data")
+            
+            # Validate required parameters
+            if not sensor_id:
+                log_warning("Missing sensor_id parameter", "API /api/historical_data")
+                return jsonify({
+                    'success': False,
+                    'error': 'Missing required parameter: sensor_id'
+                }), 400
+            
+            # Set default time range (24 hours ago to now)
+            now = datetime.now(UTC)
+            default_start_time = now - timedelta(hours=24)
+            
+            # Parse start_time
+            if start_time_str:
+                try:
+                    start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                    # Ensure timezone awareness
+                    if start_time.tzinfo is None:
+                        start_time = start_time.replace(tzinfo=UTC)
+                except ValueError:
+                    log_warning(f"Invalid start_time format: {start_time_str}", "API /api/historical_data")
+                    return jsonify({
+                        'success': False,
+                        'error': 'Invalid start_time format. Use ISO format (e.g., 2025-01-01T12:00:00Z)'
+                    }), 400
+            else:
+                start_time = default_start_time
+            
+            # Parse end_time
+            if end_time_str:
+                try:
+                    end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+                    # Ensure timezone awareness
+                    if end_time.tzinfo is None:
+                        end_time = end_time.replace(tzinfo=UTC)
+                except ValueError:
+                    log_warning(f"Invalid end_time format: {end_time_str}", "API /api/historical_data")
+                    return jsonify({
+                        'success': False,
+                        'error': 'Invalid end_time format. Use ISO format (e.g., 2025-01-01T12:00:00Z)'
+                    }), 400
+            else:
+                end_time = now
+            
+            # Validate time range
+            if start_time >= end_time:
+                log_warning(f"Invalid time range: start_time ({start_time}) >= end_time ({end_time})", "API /api/historical_data")
+                return jsonify({
+                    'success': False,
+                    'error': 'start_time must be before end_time'
+                }), 400
+            
+            with get_db_session_context() as session:
+                # Verify sensor exists
+                sensor = session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+                if not sensor:
+                    log_warning(f"Sensor not found: {sensor_id}", "API /api/historical_data")
+                    return jsonify({
+                        'success': False,
+                        'error': f'Sensor not found: {sensor_id}'
+                    }), 404
+                
+                # Get historical readings within the time range
+                readings = session.query(SensorReading)\
+                    .filter(and_(
+                        SensorReading.sensor_id == sensor_id,
+                        SensorReading.timestamp >= start_time,
+                        SensorReading.timestamp <= end_time
+                    ))\
+                    .order_by(SensorReading.timestamp)\
+                    .all()
+                
+                # Format response data as simple array of objects
+                historical_data = []
+                for reading in readings:
+                    historical_data.append({
+                        'timestamp': reading.timestamp.isoformat(),
+                        'temperature': reading.temperature,
+                        'humidity': reading.humidity
+                    })
+                
+                log_info(f"Successfully retrieved {len(historical_data)} historical readings for sensor {sensor_id}", "API /api/historical_data")
+                
+                # Handle case where no data is found
+                if not historical_data:
+                    log_info(f"No data found for sensor {sensor_id} in time range {start_time} to {end_time}", "API /api/historical_data")
+                    return jsonify([])
+                
+                return jsonify(historical_data)
+                
+        except Exception as e:
+            response, status_code = handle_flask_error(e, "API /api/historical_data")
+            return jsonify(response), status_code
 
 
 # Create Flask application instance
@@ -153,153 +420,6 @@ def get_time_filter(time_slice):
         raise ValueError(f"Invalid time_slice. Must be one of: {', '.join(time_slice_map.keys())}")
     
     return time_slice_map[time_slice]
-
-
-@app.route('/api/sensors', methods=['GET'])
-def get_sensors():
-    """
-    Get all configured sensors.
-    
-    Returns:
-        JSON response with list of all sensors including their configuration.
-    """
-    try:
-        log_info("Retrieving all sensors", "API /api/sensors")
-        
-        with get_db_session_context() as session:
-            sensors = session.query(Sensor).all()
-            
-            log_info(f"Successfully retrieved {len(sensors)} sensors", "API /api/sensors")
-            return jsonify({
-                'success': True,
-                'data': [serialize_sensor(sensor) for sensor in sensors],
-                'count': len(sensors)
-            })
-            
-    except Exception as e:
-        response, status_code = handle_flask_error(e, "API /api/sensors")
-        return jsonify(response), status_code
-
-
-@app.route('/api/sensors/latest', methods=['GET'])
-def get_latest_readings():
-    """
-    Get the latest reading for each active sensor.
-    
-    Returns:
-        JSON response with latest readings for all active sensors.
-    """
-    try:
-        log_info("Retrieving latest sensor readings", "API /api/sensors/latest")
-        
-        with get_db_session_context() as session:
-            # Get all active sensors
-            active_sensors = session.query(Sensor).filter(Sensor.active == True).all()
-            
-            latest_readings = []
-            
-            for sensor in active_sensors:
-                # Get the latest reading for this sensor
-                latest_reading = session.query(SensorReading)\
-                    .filter(SensorReading.sensor_id == sensor.sensor_id)\
-                    .order_by(desc(SensorReading.timestamp))\
-                    .first()
-                
-                if latest_reading:
-                    reading_data = serialize_sensor_reading(latest_reading)
-                    reading_data['sensor_name'] = sensor.name
-                    latest_readings.append(reading_data)
-            
-            log_info(f"Successfully retrieved latest readings for {len(latest_readings)} sensors", "API /api/sensors/latest")
-            return jsonify({
-                'success': True,
-                'data': latest_readings,
-                'count': len(latest_readings)
-            })
-            
-    except Exception as e:
-        response, status_code = handle_flask_error(e, "API /api/sensors/latest")
-        return jsonify(response), status_code
-
-
-@app.route('/api/sensors/history', methods=['GET'])
-def get_sensor_history():
-    """
-    Get historical data for a specified sensor and time slice.
-    
-    Query Parameters:
-        sensor_id (str): ID of the sensor to get history for
-        time_slice (str): Time period ('last_hour', 'today', '24h', '7d', '30d')
-        
-    Returns:
-        JSON response with historical sensor readings.
-    """
-    try:
-        # Get query parameters
-        sensor_id = request.args.get('sensor_id')
-        time_slice = request.args.get('time_slice')
-        
-        log_info(f"Retrieving sensor history for sensor_id={sensor_id}, time_slice={time_slice}", "API /api/sensors/history")
-        
-        # Validate required parameters
-        if not sensor_id:
-            log_warning("Missing sensor_id parameter", "API /api/sensors/history")
-            return jsonify({
-                'success': False,
-                'error': 'Missing required parameter: sensor_id'
-            }), 400
-            
-        if not time_slice:
-            log_warning("Missing time_slice parameter", "API /api/sensors/history")
-            return jsonify({
-                'success': False,
-                'error': 'Missing required parameter: time_slice'
-            }), 400
-        
-        # Validate time_slice
-        try:
-            start_time = get_time_filter(time_slice)
-        except ValueError as e:
-            log_warning(f"Invalid time_slice parameter: {time_slice}", "API /api/sensors/history")
-            return jsonify({
-                'success': False,
-                'error': str(e)
-            }), 400
-        
-        with get_db_session_context() as session:
-            # Verify sensor exists
-            sensor = session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
-            if not sensor:
-                log_warning(f"Sensor not found: {sensor_id}", "API /api/sensors/history")
-                return jsonify({
-                    'success': False,
-                    'error': f'Sensor not found: {sensor_id}'
-                }), 404
-            
-            # Get historical readings
-            readings = session.query(SensorReading)\
-                .filter(and_(
-                    SensorReading.sensor_id == sensor_id,
-                    SensorReading.timestamp >= start_time
-                ))\
-                .order_by(desc(SensorReading.timestamp))\
-                .all()
-            
-            log_info(f"Successfully retrieved {len(readings)} historical readings for sensor {sensor_id}", "API /api/sensors/history")
-            return jsonify({
-                'success': True,
-                'data': {
-                    'sensor': serialize_sensor(sensor),
-                    'readings': [serialize_sensor_reading(reading) for reading in readings],
-                    'time_slice': time_slice,
-                    'start_time': start_time.isoformat(),
-                    'count': len(readings)
-                }
-            })
-            
-    except Exception as e:
-        response, status_code = handle_flask_error(e, "API /api/sensors/history", {"sensor_id": sensor_id, "time_slice": time_slice})
-        return jsonify(response), status_code
 
 
 # Web Interface Routes

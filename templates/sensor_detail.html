@@ -42,12 +42,21 @@
     </div>
     
     <!-- Chart Container for Sensor Detail -->
-    {% if readings %}
     <div style="margin-bottom: 2rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-        <h3 style="margin-bottom: 1rem; color: #667eea;">{{ sensor.name }} - Historical Data</h3>
-        <canvas id="sensorDetailChart" width="400" height="200"></canvas>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="color: #667eea; margin: 0;">{{ sensor.name }} - Historical Data</h3>
+            <div class="time-slice-controls">
+                <button class="time-slice-btn" data-slice="last_hour" onclick="updateSensorChart('last_hour')">Last Hour</button>
+                <button class="time-slice-btn" data-slice="today" onclick="updateSensorChart('today')">Today</button>
+                <button class="time-slice-btn active" data-slice="24h" onclick="updateSensorChart('24h')">24h</button>
+                <button class="time-slice-btn" data-slice="7d" onclick="updateSensorChart('7d')">7d</button>
+                <button class="time-slice-btn" data-slice="30d" onclick="updateSensorChart('30d')">30d</button>
+            </div>
+        </div>
+        <div style="height: 400px;">
+            <canvas id="sensorDetailChart"></canvas>
+        </div>
     </div>
-    {% endif %}
     
     {% if readings %}
         <h3>Recent Readings (Last 24 Hours)</h3>
@@ -95,4 +104,72 @@
         </ul>
     </div>
 </div>
+
+<style>
+.time-slice-controls {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.time-slice-btn {
+    padding: 0.5rem 1rem;
+    border: 2px solid #667eea;
+    background: white;
+    color: #667eea;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.time-slice-btn:hover {
+    background: #667eea;
+    color: white;
+}
+
+.time-slice-btn.active {
+    background: #667eea;
+    color: white;
+}
+
+@media (max-width: 768px) {
+    .time-slice-controls {
+        justify-content: center;
+        margin-top: 1rem;
+    }
+    
+    .time-slice-btn {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.8rem;
+    }
+}
+</style>
+
+<script>
+// Sensor detail chart functionality
+let currentSensorTimeSlice = '24h';
+const sensorId = '{{ sensor.sensor_id }}';
+
+function updateSensorChart(timeSlice) {
+    currentSensorTimeSlice = timeSlice;
+    
+    // Update button states
+    document.querySelectorAll('.time-slice-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelector('[data-slice="' + timeSlice + '"]').classList.add('active');
+    
+    // Render chart with new time slice
+    const title = '{{ sensor.name }} - ' + getTimeSliceLabel(timeSlice);
+    renderSensorChart('sensorDetailChart', sensorId, timeSlice, title);
+}
+
+// Initialize sensor detail chart when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Initializing sensor detail chart for sensor:', sensorId);
+    updateSensorChart('24h');
+});
+</script>
 {% endblock %}
