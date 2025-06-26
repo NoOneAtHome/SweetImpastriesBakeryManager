@@ -6,6 +6,26 @@
 <div class="dashboard">
     <h2>Sensor Overview</h2>
     
+    <!-- Chart Container for Dashboard Overview -->
+    {% if sensors_data %}
+    <div style="margin-top: 2rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="color: #667eea; margin: 0;">Sensor Data Overview</h3>
+            <div class="time-slice-controls">
+                <button class="time-slice-btn" data-slice="4h" onclick="updateDashboardChart('4h')">4h</button>
+                <button class="time-slice-btn" data-slice="8h" onclick="updateDashboardChart('8h')">8h</button>
+                <button class="time-slice-btn" data-slice="12h" onclick="updateDashboardChart('12h')">12h</button>
+                <button class="time-slice-btn active" data-slice="24h" onclick="updateDashboardChart('24h')">24h</button>
+                <button class="time-slice-btn" data-slice="7d" onclick="updateDashboardChart('7d')">7d</button>
+                <button class="time-slice-btn" data-slice="30d" onclick="updateDashboardChart('30d')">30d</button>
+            </div>
+        </div>
+        <div style="height: 400px;">
+            <canvas id="dashboardChart"></canvas>
+        </div>
+    </div>
+    {% endif %}
+    
     {% if sensors_data %}
         <div class="sensor-grid">
             {% for sensor_data in sensors_data %}
@@ -73,23 +93,6 @@
             <h3>No active sensors found</h3>
             <p>Make sure the polling service is running and sensors are configured.</p>
         </div>
-    {% endif %}
-    
-    <!-- Chart Container for Dashboard Overview -->
-    {% if sensors_data %}
-    <div style="margin-top: 2rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-            <h3 style="color: #667eea; margin: 0;">Sensor Data Overview</h3>
-            <div class="time-slice-controls">
-                <button class="time-slice-btn active" data-slice="24h" onclick="updateDashboardChart('24h')">24h</button>
-                <button class="time-slice-btn" data-slice="7d" onclick="updateDashboardChart('7d')">7d</button>
-                <button class="time-slice-btn" data-slice="30d" onclick="updateDashboardChart('30d')">30d</button>
-            </div>
-        </div>
-        <div style="height: 400px;">
-            <canvas id="dashboardChart"></canvas>
-        </div>
-    </div>
     {% endif %}
     
     <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e1e5e9;">
