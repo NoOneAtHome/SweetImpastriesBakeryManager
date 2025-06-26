@@ -101,19 +101,16 @@ function calculateTimeRange(timeSlice) {
 function processDataForChart(rawData) {
     const labels = [];
     const temperatureData = [];
-    const humidityData = [];
     
     rawData.forEach(reading => {
         const timestamp = new Date(reading.timestamp);
         labels.push(timestamp);
         temperatureData.push(reading.temperature);
-        humidityData.push(reading.humidity);
     });
     
     return {
         labels,
-        temperatureData,
-        humidityData
+        temperatureData
     };
 }
 
@@ -121,9 +118,10 @@ function processDataForChart(rawData) {
  * Create Chart.js configuration for sensor data
  * @param {Object} processedData - Processed data from processDataForChart
  * @param {string} title - Chart title
+ * @param {boolean} hourlyAverage - Whether the data is hourly averaged
  * @returns {Object} Chart.js configuration object
  */
-function createChartConfig(processedData, title) {
+function createChartConfig(processedData, title, hourlyAverage = false) {
     return {
         type: 'line',
         data: {
@@ -138,16 +136,6 @@ function createChartConfig(processedData, title) {
                     fill: false,
                     tension: 0.1,
                     yAxisID: 'y'
-                },
-                {
-                    label: 'Humidity (%)',
-                    data: processedData.humidityData,
-                    borderColor: '#3498db',
-                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
-                    borderWidth: 2,
-                    fill: false,
-                    tension: 0.1,
-                    yAxisID: 'y1'
                 }
             ]
         },
@@ -179,11 +167,7 @@ function createChartConfig(processedData, title) {
                         label: function(context) {
                             const label = context.dataset.label;
                             const value = context.parsed.y;
-                            if (label.includes('Temperature')) {
-                                return `${label}: ${value.toFixed(1)}°C`;
-                            } else {
-                                return `${label}: ${value.toFixed(1)}%`;
-                            }
+                            return `${label}: ${value.toFixed(1)}°C`;
                         }
                     }
                 },
@@ -208,13 +192,24 @@ function createChartConfig(processedData, title) {
             scales: {
                 x: {
                     type: 'time',
-                    time: {
+                    time: hourlyAverage ? {
+                        unit: 'hour',
                         displayFormats: {
+                            hour: 'MMM dd HH:00',
+                            day: 'MMM dd',
+                            week: 'MMM dd',
+                            month: 'MMM yyyy'
+                        },
+                        tooltipFormat: 'MMM dd, yyyy HH:00'
+                    } : {
+                        displayFormats: {
+                            minute: 'HH:mm',
                             hour: 'MMM dd HH:mm',
                             day: 'MMM dd',
                             week: 'MMM dd',
                             month: 'MMM yyyy'
-                        }
+                        },
+                        tooltipFormat: 'MMM dd, yyyy HH:mm:ss'
                     },
                     title: {
                         display: true,
@@ -229,19 +224,6 @@ function createChartConfig(processedData, title) {
                         display: true,
                         text: 'Temperature (°C)',
                         color: '#007e15'
-                    },
-                    grid: {
-                        drawOnChartArea: false,
-                    },
-                },
-                y1: {
-                    type: 'linear',
-                    display: true,
-                    position: 'right',
-                    title: {
-                        display: true,
-                        text: 'Humidity (%)',
-                        color: '#3498db'
                     },
                     grid: {
                         drawOnChartArea: true,
@@ -304,7 +286,7 @@ async function renderSensorChart(canvasId, sensorId, timeSlice = '24h', title = 
         const processedData = processDataForChart(rawData);
         
         // Create chart configuration
-        const config = createChartConfig(processedData, title);
+        const config = createChartConfig(processedData, title, hourlyAverage);
         
         // Destroy existing chart if it exists
         if (canvasId === 'dashboardChart' && dashboardChart) {
@@ -341,6 +323,8 @@ async function renderSensorChart(canvasId, sensorId, timeSlice = '24h', title = 
             ctx.fillText('Error loading chart data', canvas.width / 2, canvas.height / 2);
         }
     }
+}
+
 /**
  * Reset zoom on a chart
  * @param {string} canvasId - ID of the canvas element
@@ -360,8 +344,6 @@ function resetChartZoom(canvasId) {
     } else {
         console.warn(`Chart not found or resetZoom not available for: ${canvasId}`);
     }
-}
-
 }
 
 /**

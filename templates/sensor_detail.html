@@ -43,14 +43,22 @@
     
     <!-- Chart Container for Sensor Detail -->
     <div style="margin-bottom: 2rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
             <h3 style="color: #667eea; margin: 0;">{{ sensor.name }} - Historical Data</h3>
-            <div class="time-slice-controls">
-                <button class="time-slice-btn" data-slice="last_hour" onclick="updateSensorChart('last_hour')">Last Hour</button>
-                <button class="time-slice-btn" data-slice="today" onclick="updateSensorChart('today')">Today</button>
-                <button class="time-slice-btn active" data-slice="24h" onclick="updateSensorChart('24h')">24h</button>
-                <button class="time-slice-btn" data-slice="7d" onclick="updateSensorChart('7d')">7d</button>
-                <button class="time-slice-btn" data-slice="30d" onclick="updateSensorChart('30d')">30d</button>
+            <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                <div class="hourly-average-control">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: #667eea;">
+                        <input type="checkbox" id="hourlyAverageCheckbox" onchange="toggleHourlyAverage()" style="margin: 0;">
+                        Average over hour
+                    </label>
+                </div>
+                <div class="time-slice-controls">
+                    <button class="time-slice-btn" data-slice="last_hour" onclick="updateSensorChart('last_hour')">Last Hour</button>
+                    <button class="time-slice-btn" data-slice="today" onclick="updateSensorChart('today')">Today</button>
+                    <button class="time-slice-btn active" data-slice="24h" onclick="updateSensorChart('24h')">24h</button>
+                    <button class="time-slice-btn" data-slice="7d" onclick="updateSensorChart('7d')">7d</button>
+                    <button class="time-slice-btn" data-slice="30d" onclick="updateSensorChart('30d')">30d</button>
+                </div>
             </div>
         </div>
         <div style="height: 400px;">
@@ -150,6 +158,7 @@
 <script>
 // Sensor detail chart functionality
 let currentSensorTimeSlice = '24h';
+let currentHourlyAverage = false;
 const sensorId = '{{ sensor.sensor_id }}';
 
 function updateSensorChart(timeSlice) {
@@ -161,9 +170,22 @@ function updateSensorChart(timeSlice) {
     });
     document.querySelector('[data-slice="' + timeSlice + '"]').classList.add('active');
     
-    // Render chart with new time slice
-    const title = '{{ sensor.name }} - ' + getTimeSliceLabel(timeSlice);
-    renderSensorChart('sensorDetailChart', sensorId, timeSlice, title);
+    // Render chart with current settings
+    renderChartWithCurrentSettings();
+}
+
+function toggleHourlyAverage() {
+    const checkbox = document.getElementById('hourlyAverageCheckbox');
+    currentHourlyAverage = checkbox.checked;
+    
+    // Re-render chart with new averaging setting
+    renderChartWithCurrentSettings();
+}
+
+function renderChartWithCurrentSettings() {
+    const title = '{{ sensor.name }} - ' + getTimeSliceLabel(currentSensorTimeSlice) +
+                  (currentHourlyAverage ? ' (Hourly Average)' : '');
+    renderSensorChart('sensorDetailChart', sensorId, currentSensorTimeSlice, title, currentHourlyAverage);
 }
 
 // Initialize sensor detail chart when page loads

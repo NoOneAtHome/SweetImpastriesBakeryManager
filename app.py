@@ -322,9 +322,9 @@ def register_routes(app):
                 
                 if hourly_average:
                     # Get hourly averaged data using SQL aggregation
-                    # Group by hour and calculate averages
+                    # Group by hour and calculate averages using SQLite's strftime function
                     readings = session.query(
-                        func.date_trunc('hour', SensorReading.timestamp).label('hour'),
+                        func.strftime('%Y-%m-%d %H:00:00', SensorReading.timestamp).label('hour'),
                         func.avg(SensorReading.temperature).label('avg_temperature'),
                         func.avg(SensorReading.humidity).label('avg_humidity')
                     ).filter(and_(
@@ -332,16 +332,18 @@ def register_routes(app):
                         SensorReading.timestamp >= start_time,
                         SensorReading.timestamp <= end_time
                     )).group_by(
-                        func.date_trunc('hour', SensorReading.timestamp)
+                        func.strftime('%Y-%m-%d %H:00:00', SensorReading.timestamp)
                     ).order_by(
-                        func.date_trunc('hour', SensorReading.timestamp)
+                        func.strftime('%Y-%m-%d %H:00:00', SensorReading.timestamp)
                     ).all()
                     
                     # Format hourly averaged data
                     historical_data = []
                     for reading in readings:
+                        # Parse the strftime result back to datetime and convert to ISO format
+                        hour_datetime = datetime.strptime(reading.hour, '%Y-%m-%d %H:%M:%S').replace(tzinfo=UTC)
                         historical_data.append({
-                            'timestamp': reading.hour.isoformat(),
+                            'timestamp': hour_datetime.isoformat(),
                             'temperature': round(float(reading.avg_temperature), 2),
                             'humidity': round(float(reading.avg_humidity), 2)
                         })
