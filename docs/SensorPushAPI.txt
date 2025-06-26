@@ -1,0 +1,144 @@
+# SensorPush Gateway Cloud API
+
+## Docs
+
+- [API Overview](https://www.sensorpush.com/gateway-cloud-api): Overview of the SensorPush Gateway Cloud API, enabling secure HTTPS access to real-time and historical environmental sensor data from SensorPush devices.
+
+- [Authentication](https://www.sensorpush.com/gateway-cloud-api#/definitions/AuthenticationRequest): 
+  Authenticates a user with email and password to generate an authorization token for future requests.
+
+  **Sample Request**:
+  {
+    "email": "user@example.com",
+    "password": "your_password"
+  }
+
+- [Access Token](https://www.sensorpush.com/gateway-cloud-api#/definitions/AccessTokenRequest):
+  Exchanges the authentication code for a session token.
+
+  **Sample Request**:
+  {
+    "authorization": "your_auth_code"
+  }
+
+- [Devices](https://www.sensorpush.com/gateway-cloud-api#/definitions/Device):
+  Returns a list of all SensorPush devices (sensors and gateways) associated with the account.
+
+  **Sample Response**:
+  {
+    "ABC123": {
+      "name": "Fridge Sensor",
+      "active": true,
+      "id": "ABC123"
+    }
+  }
+
+- [Gateways](https://www.sensorpush.com/gateway-cloud-api#/definitions/Gateway):
+  Returns a list of registered SensorPush gateways.
+
+  **Sample Response**:
+  {
+    "12345678": {
+      "id": "12345678",
+      "name": "Main Gateway",
+      "hardware": "G1",
+      "firmware": "1.1.3",
+      "created": 1673200000,
+      "updated": 1673210000
+    }
+  }
+
+- [Sensors](https://www.sensorpush.com/gateway-cloud-api#/definitions/Sensor):
+  Lists all SensorPush sensors with metadata like name, hardware model, active status, and last seen time.
+
+  **Sample Response**:
+  {
+    "ABC123": {
+      "id": "ABC123",
+      "name": "Storage Freezer",
+      "hardware": "HT1",
+      "active": true,
+      "last_seen": 1673214000
+    }
+  }
+
+- [Status](https://www.sensorpush.com/gateway-cloud-api#/definitions/Status):
+  Returns gateway and sensor online status, with latest environmental readings.
+
+  **Sample Response**:
+  {
+    "sensors": {
+      "ABC123": {
+        "temperature": 4.3,
+        "humidity": 72.5,
+        "battery": 3.1,
+        "signal_strength": -65,
+        "status": "active"
+      }
+    },
+    "gateway_connected": true,
+    "timestamp": 1673220000
+  }
+
+- [Latest Sample Data](https://www.sensorpush.com/gateway-cloud-api#/definitions/LatestSampleData):
+  Returns most recent sample readings for a list of sensors.
+
+  **Sample Request**:
+  {
+    "sensors": ["ABC123", "XYZ789"]
+  }
+
+  **Sample Response**:
+  {
+    "ABC123": {
+      "temperature": 4.3,
+      "humidity": 72.5,
+      "time": 1673220000
+    }
+  }
+
+- [Sample Data](https://www.sensorpush.com/gateway-cloud-api#/definitions/SampleData):
+  Retrieves historical readings between specified timestamps.
+
+  **Sample Request**:
+  {
+    "sensors": ["ABC123"],
+    "startTime": 1673120000,
+    "endTime": 1673220000
+  }
+
+  **Sample Response**:
+  {
+    "ABC123": {
+      "observations": [
+        [1673120000, 4.3, 72.5],
+        [1673130000, 4.4, 73.0]
+      ]
+    }
+  }
+
+- [Alerts](https://www.sensorpush.com/gateway-cloud-api#/definitions/Alert):
+  Lists user-configured alerts for thresholds (temperature, humidity, battery, etc.)
+
+  **Sample Response**:
+  {
+    "alerts": [
+      {
+        "sensor": "ABC123",
+        "type": "temperature",
+        "threshold": {
+          "min": 2.0,
+          "max": 8.0
+        }
+      }
+    ]
+  }
+
+- [Units](https://www.sensorpush.com/gateway-cloud-api#/definitions/Unit):
+  Provides unit definitions for interpreting values (e.g. Celsius, Fahrenheit, %RH).
+
+  **Sample Response**:
+  {
+    "temperature": "Celsius",
+    "humidity": "%RH"
+  }

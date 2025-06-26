@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Error - Bakery Sensors{% endblock %}
+
+{% block header %}Error{% endblock %}
+
+{% block content %}
+<div class="error-page" style="text-align: center; padding: 2rem;">
+    <div class="error" style="max-width: 600px; margin: 0 auto;">
+        <h2>Oops! Something went wrong</h2>
+        <p style="font-size: 1.1rem; margin: 1rem 0;">{{ error }}</p>
+        
+        <div style="margin-top: 2rem;">
+            <a href="/" class="btn">← Back to Dashboard</a>
+        </div>
+        
+        <div style="margin-top: 2rem; padding: 1rem; background: #f8f9fa; border-radius: 5px; text-align: left;">
+            <h4>Troubleshooting Tips:</h4>
+            <ul style="margin-top: 0.5rem;">
+                <li>Make sure the polling service is running</li>
+                <li>Check that sensors are properly configured</li>
+                <li>Verify database connectivity</li>
+                <li>Check the application logs for more details</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

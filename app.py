@@ -1,0 +1,656 @@
+import logging
+import sys
+
+"""
+Flask application for the Bakery Sensors Data Retrieval API.
+
+This module implements the main Flask application with API endpoints for:
+- Retrieving sensor configurations
+- Getting latest sensor readings
+- Accessing historical sensor data
+- Manager authentication and settings
+"""
+
+from datetime import datetime, timedelta, UTC
+from zoneinfo import ZoneInfo
+from flask import Flask, jsonify, request, render_template, redirect, url_for, session, flash
+from flask_session import Session as FlaskSession
+from sqlalchemy.orm import Session
+from sqlalchemy import desc, and_
+from config import get_config, TestingConfig # Import TestingConfig
+from database import get_db_session_context
+from models import Sensor, SensorReading
+from error_handling import handle_flask_error, log_info, log_warning, get_error_handler
+from polling_service import PollingService, create_polling_service # Import PollingService
+from auth import auth_manager, require_manager_auth, setup_initial_pin_from_args, AuthenticationError, AccountLockoutError
+from settings_manager import SettingsManager, check_threshold_breach
+
+def create_app(config_name=None):
+    """
+    Create and configure the Flask application.
+    
+    Args:
+        config_name (str, optional): Configuration name to use
+        
+    Returns:
+        Flask: Configured Flask application instance
+    """
+    app = Flask(__name__)
+    
+    # Load configuration
+    print(f"create_app called with config_name: {config_name}")
+    if config_name == 'testing':
+        config = TestingConfig
+    else:
+        config = get_config(config_name)
+    app.config.from_object(config)
+
+    # Configure Flask-Session
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_PERMANENT'] = False
+    app.config['SESSION_USE_SIGNER'] = True
+    app.config['SESSION_KEY_PREFIX'] = 'sensor_dashboard:'
+    app.config['SESSION_FILE_DIR'] = './flask_session'
+    
+    # Initialize Flask-Session
+    FlaskSession(app)
+
+    # Configure logging
+    logging.basicConfig(level=config.LOG_LEVEL, stream=sys.stdout,
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
+    # Add custom Jinja2 filter for local time conversion
+    @app.template_filter('localtime')
+    def localtime_filter(utc_datetime):
+        """Convert UTC datetime to local time and format as string"""
+        if utc_datetime is None:
+            return None
+        
+        # Ensure the datetime is timezone-aware (UTC)
+        if utc_datetime.tzinfo is None:
+            utc_datetime = utc_datetime.replace(tzinfo=UTC)
+        
+        # Get the local timezone (Pacific Time for bakery location)
+        local_tz = ZoneInfo('America/Los_Angeles')
+        
+        # Convert to local time
+        local_time = utc_datetime.astimezone(local_tz)
+        
+        # Format and return as string
+        return local_time.strftime('%Y-%m-%d %H:%M:%S')
+    
+    return app
+
+
+# Create Flask application instance
+app = create_app()
+
+
+def serialize_sensor(sensor):
+    """
+    Serialize a Sensor object to a dictionary.
+    
+    Args:
+        sensor (Sensor): Sensor model instance
+        
+    Returns:
+        dict: Serialized sensor data
+    """
+    return {
+        'sensor_id': sensor.sensor_id,
+        'name': sensor.name,
+        'active': sensor.active,
+        'min_temp': sensor.min_temp,
+        'max_temp': sensor.max_temp,
+        'min_humidity': sensor.min_humidity,
+        'max_humidity': sensor.max_humidity
+    }
+
+
+def serialize_sensor_reading(reading):
+    """
+    Serialize a SensorReading object to a dictionary.
+    
+    Args:
+        reading (SensorReading): SensorReading model instance
+        
+    Returns:
+        dict: Serialized sensor reading data
+    """
+    return {
+        'id': reading.id,
+        'sensor_id': reading.sensor_id,
+        'timestamp': reading.timestamp.isoformat(),
+        'temperature': reading.temperature,
+        'humidity': reading.humidity
+    }
+
+
+def get_time_filter(time_slice):
+    """
+    Convert time slice string to datetime filter.
+    
+    Args:
+        time_slice (str): Time slice identifier
+        
+    Returns:
+        datetime: Start datetime for filtering
+        
+    Raises:
+        ValueError: If time_slice is invalid
+    """
+    now = datetime.now(UTC)
+    
+    time_slice_map = {
+        'last_hour': now - timedelta(hours=1),
+        'today': now.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=UTC),
+        '24h': now - timedelta(hours=24),
+        '7d': now - timedelta(days=7),
+        '30d': now - timedelta(days=30)
+    }
+    
+    if time_slice not in time_slice_map:
+        raise ValueError(f"Invalid time_slice. Must be one of: {', '.join(time_slice_map.keys())}")
+    
+    return time_slice_map[time_slice]
+
+
+@app.route('/api/sensors', methods=['GET'])
+def get_sensors():
+    """
+    Get all configured sensors.
+    
+    Returns:
+        JSON response with list of all sensors including their configuration.
+    """
+    try:
+        log_info("Retrieving all sensors", "API /api/sensors")
+        
+        with get_db_session_context() as session:
+            sensors = session.query(Sensor).all()
+            
+            log_info(f"Successfully retrieved {len(sensors)} sensors", "API /api/sensors")
+            return jsonify({
+                'success': True,
+                'data': [serialize_sensor(sensor) for sensor in sensors],
+                'count': len(sensors)
+            })
+            
+    except Exception as e:
+        response, status_code = handle_flask_error(e, "API /api/sensors")
+        return jsonify(response), status_code
+
+
+@app.route('/api/sensors/latest', methods=['GET'])
+def get_latest_readings():
+    """
+    Get the latest reading for each active sensor.
+    
+    Returns:
+        JSON response with latest readings for all active sensors.
+    """
+    try:
+        log_info("Retrieving latest sensor readings", "API /api/sensors/latest")
+        
+        with get_db_session_context() as session:
+            # Get all active sensors
+            active_sensors = session.query(Sensor).filter(Sensor.active == True).all()
+            
+            latest_readings = []
+            
+            for sensor in active_sensors:
+                # Get the latest reading for this sensor
+                latest_reading = session.query(SensorReading)\
+                    .filter(SensorReading.sensor_id == sensor.sensor_id)\
+                    .order_by(desc(SensorReading.timestamp))\
+                    .first()
+                
+                if latest_reading:
+                    reading_data = serialize_sensor_reading(latest_reading)
+                    reading_data['sensor_name'] = sensor.name
+                    latest_readings.append(reading_data)
+            
+            log_info(f"Successfully retrieved latest readings for {len(latest_readings)} sensors", "API /api/sensors/latest")
+            return jsonify({
+                'success': True,
+                'data': latest_readings,
+                'count': len(latest_readings)
+            })
+            
+    except Exception as e:
+        response, status_code = handle_flask_error(e, "API /api/sensors/latest")
+        return jsonify(response), status_code
+
+
+@app.route('/api/sensors/history', methods=['GET'])
+def get_sensor_history():
+    """
+    Get historical data for a specified sensor and time slice.
+    
+    Query Parameters:
+        sensor_id (str): ID of the sensor to get history for
+        time_slice (str): Time period ('last_hour', 'today', '24h', '7d', '30d')
+        
+    Returns:
+        JSON response with historical sensor readings.
+    """
+    try:
+        # Get query parameters
+        sensor_id = request.args.get('sensor_id')
+        time_slice = request.args.get('time_slice')
+        
+        log_info(f"Retrieving sensor history for sensor_id={sensor_id}, time_slice={time_slice}", "API /api/sensors/history")
+        
+        # Validate required parameters
+        if not sensor_id:
+            log_warning("Missing sensor_id parameter", "API /api/sensors/history")
+            return jsonify({
+                'success': False,
+                'error': 'Missing required parameter: sensor_id'
+            }), 400
+            
+        if not time_slice:
+            log_warning("Missing time_slice parameter", "API /api/sensors/history")
+            return jsonify({
+                'success': False,
+                'error': 'Missing required parameter: time_slice'
+            }), 400
+        
+        # Validate time_slice
+        try:
+            start_time = get_time_filter(time_slice)
+        except ValueError as e:
+            log_warning(f"Invalid time_slice parameter: {time_slice}", "API /api/sensors/history")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 400
+        
+        with get_db_session_context() as session:
+            # Verify sensor exists
+            sensor = session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+            if not sensor:
+                log_warning(f"Sensor not found: {sensor_id}", "API /api/sensors/history")
+                return jsonify({
+                    'success': False,
+                    'error': f'Sensor not found: {sensor_id}'
+                }), 404
+            
+            # Get historical readings
+            readings = session.query(SensorReading)\
+                .filter(and_(
+                    SensorReading.sensor_id == sensor_id,
+                    SensorReading.timestamp >= start_time
+                ))\
+                .order_by(desc(SensorReading.timestamp))\
+                .all()
+            
+            log_info(f"Successfully retrieved {len(readings)} historical readings for sensor {sensor_id}", "API /api/sensors/history")
+            return jsonify({
+                'success': True,
+                'data': {
+                    'sensor': serialize_sensor(sensor),
+                    'readings': [serialize_sensor_reading(reading) for reading in readings],
+                    'time_slice': time_slice,
+                    'start_time': start_time.isoformat(),
+                    'count': len(readings)
+                }
+            })
+            
+    except Exception as e:
+        response, status_code = handle_flask_error(e, "API /api/sensors/history", {"sensor_id": sensor_id, "time_slice": time_slice})
+        return jsonify(response), status_code
+
+
+# Web Interface Routes
+
+@app.route('/')
+def index():
+    """
+    Main dashboard page showing all sensors and their latest readings.
+    """
+    try:
+        log_info("Loading main dashboard", "Web Interface")
+        
+        with get_db_session_context() as session:
+            # Get all active sensors with their latest readings
+            active_sensors = session.query(Sensor).filter(Sensor.active == True).all()
+            
+            sensors_with_readings = []
+            for sensor in active_sensors:
+                # Get the latest reading for this sensor
+                latest_reading = session.query(SensorReading)\
+                    .filter(SensorReading.sensor_id == sensor.sensor_id)\
+                    .order_by(desc(SensorReading.timestamp))\
+                    .first()
+                
+                # Check for threshold breaches
+                threshold_info = check_threshold_breach(sensor, latest_reading)
+                
+                sensor_data = {
+                    'sensor': sensor,
+                    'latest_reading': latest_reading,
+                    'threshold_info': threshold_info
+                }
+                sensors_with_readings.append(sensor_data)
+            
+            log_info(f"Dashboard loaded with {len(sensors_with_readings)} active sensors", "Web Interface")
+            return render_template('dashboard.html', sensors_data=sensors_with_readings)
+            
+    except Exception as e:
+        log_warning(f"Error loading dashboard: {str(e)}", "Web Interface")
+        return render_template('error.html', error="Failed to load dashboard"), 500
+
+
+@app.route('/sensor/<sensor_id>')
+def sensor_detail(sensor_id):
+    """
+    Detailed view for a specific sensor showing recent history.
+    """
+    try:
+        log_info(f"Loading sensor detail for {sensor_id}", "Web Interface")
+        
+        with get_db_session_context() as session:
+            # Get sensor information
+            sensor = session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+            if not sensor:
+                log_warning(f"Sensor not found: {sensor_id}", "Web Interface")
+                return render_template('error.html', error=f"Sensor {sensor_id} not found"), 404
+            
+            # Get recent readings (last 24 hours)
+            start_time = datetime.now(UTC) - timedelta(hours=24)
+            readings = session.query(SensorReading)\
+                .filter(and_(
+                    SensorReading.sensor_id == sensor_id,
+                    SensorReading.timestamp >= start_time
+                ))\
+                .order_by(desc(SensorReading.timestamp))\
+                .limit(100)\
+                .all()
+            
+            log_info(f"Sensor detail loaded for {sensor_id} with {len(readings)} readings", "Web Interface")
+            return render_template('sensor_detail.html', sensor=sensor, readings=readings)
+            
+    except Exception as e:
+        log_warning(f"Error loading sensor detail for {sensor_id}: {str(e)}", "Web Interface")
+        return render_template('error.html', error="Failed to load sensor details"), 500
+
+
+# Manager Authentication Routes
+
+@app.route('/manager/login', methods=['GET', 'POST'])
+def manager_login():
+    """
+    Manager login page and authentication handler.
+    """
+    if request.method == 'GET':
+        # Check if already logged in
+        session_id = session.get('manager_session_id')
+        if session_id and auth_manager.validate_session(session_id, request.remote_addr):
+            return redirect(url_for('manager_settings'))
+        
+        return render_template('manager_login.html')
+    
+    # POST request - handle login
+    try:
+        pin = request.form.get('pin', '').strip()
+        ip_address = request.remote_addr
+        
+        if not pin:
+            return render_template('manager_login.html', error="PIN is required")
+        
+        # Attempt authentication
+        success, result = auth_manager.authenticate(pin, ip_address)
+        
+        if success:
+            # Store session ID
+            session['manager_session_id'] = result
+            session.permanent = True
+            log_info(f"Manager login successful from {ip_address}", "Manager Login")
+            return redirect(url_for('manager_settings'))
+        else:
+            # Authentication failed
+            log_warning(f"Manager login failed from {ip_address}: {result}", "Manager Login")
+            return render_template('manager_login.html', error=result)
+            
+    except AccountLockoutError as e:
+        log_warning(f"Account lockout triggered from {request.remote_addr}", "Manager Login")
+        return render_template('manager_login.html',
+                             error="Account is locked due to too many failed attempts. Please try again later.")
+    except Exception as e:
+        log_warning(f"Error during manager login: {str(e)}", "Manager Login")
+        return render_template('manager_login.html', error="Login error occurred")
+
+
+@app.route('/manager/logout')
+def manager_logout():
+    """
+    Manager logout handler.
+    """
+    session_id = session.get('manager_session_id')
+    if session_id:
+        auth_manager.logout(session_id)
+        session.pop('manager_session_id', None)
+        log_info("Manager logged out", "Manager Logout")
+    
+    return redirect(url_for('index'))
+
+
+@app.route('/manager/settings')
+@require_manager_auth
+def manager_settings():
+    """
+    Manager settings panel.
+    """
+    try:
+        config = get_config()
+        
+        # Get system statistics
+        with get_db_session_context() as db_session:
+            sensor_count = db_session.query(Sensor).filter(Sensor.active == True).count()
+            reading_count = db_session.query(SensorReading).count()
+        
+        # Get current polling interval
+        current_polling_interval = SettingsManager.get_polling_interval()
+        
+        return render_template('manager_settings.html',
+                             session_timeout=config.SESSION_TIMEOUT,
+                             max_attempts=config.MAX_LOGIN_ATTEMPTS,
+                             flask_env=config.FLASK_ENV,
+                             sensor_count=sensor_count,
+                             reading_count=reading_count,
+                             current_polling_interval=current_polling_interval,
+                             success=request.args.get('success'),
+                             error=request.args.get('error'))
+                             
+    except Exception as e:
+        log_warning(f"Error loading manager settings: {str(e)}", "Manager Settings")
+        return render_template('error.html', error="Failed to load settings"), 500
+
+
+@app.route('/manager/change-pin', methods=['POST'])
+@require_manager_auth
+def manager_change_pin():
+    """
+    Handle manager PIN change requests.
+    """
+    try:
+        current_pin = request.form.get('current_pin', '').strip()
+        new_pin = request.form.get('new_pin', '').strip()
+        confirm_pin = request.form.get('confirm_pin', '').strip()
+        
+        # Validate input
+        if not all([current_pin, new_pin, confirm_pin]):
+            return redirect(url_for('manager_settings', error="All fields are required"))
+        
+        if new_pin != confirm_pin:
+            return redirect(url_for('manager_settings', error="New PIN and confirmation do not match"))
+        
+        if len(new_pin) < 6 or not new_pin.isdigit():
+            return redirect(url_for('manager_settings', error="New PIN must be at least 6 digits and contain only numbers"))
+        
+        # Attempt PIN change
+        session_id = session.get('manager_session_id')
+        success, message = auth_manager.change_pin(current_pin, new_pin, session_id, request.remote_addr)
+        
+        if success:
+            return redirect(url_for('manager_settings', success=message))
+        else:
+            return redirect(url_for('manager_settings', error=message))
+            
+    except Exception as e:
+        log_warning(f"Error changing manager PIN: {str(e)}", "Manager Change PIN")
+        return redirect(url_for('manager_settings', error="Error changing PIN"))
+
+
+@app.route('/manager/settings/sensors', methods=['GET', 'POST'])
+@require_manager_auth
+def manager_sensor_settings():
+    """
+    Handle sensor configuration settings.
+    """
+    try:
+        if request.method == 'POST':
+            # Handle sensor updates
+            sensor_id = request.form.get('sensor_id')
+            action = request.form.get('action')
+            
+            if not sensor_id:
+                return redirect(url_for('manager_sensor_settings', error="Sensor ID is required"))
+            
+            with get_db_session_context() as db_session:
+                sensor = db_session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+                if not sensor:
+                    return redirect(url_for('manager_sensor_settings', error="Sensor not found"))
+                
+                if action == 'rename':
+                    new_name = request.form.get('new_name', '').strip()
+                    if not new_name:
+                        return redirect(url_for('manager_sensor_settings', error="New name is required"))
+                    
+                    sensor.name = new_name
+                    db_session.commit()
+                    log_info(f"Sensor {sensor_id} renamed to '{new_name}'", "Manager Settings")
+                    return redirect(url_for('manager_sensor_settings', success=f"Sensor renamed to '{new_name}'"))
+                
+                elif action == 'toggle_active':
+                    sensor.active = not sensor.active
+                    status = "activated" if sensor.active else "deactivated"
+                    db_session.commit()
+                    log_info(f"Sensor {sensor_id} {status}", "Manager Settings")
+                    return redirect(url_for('manager_sensor_settings', success=f"Sensor {status}"))
+                
+                elif action == 'update_thresholds':
+                    try:
+                        min_temp = float(request.form.get('min_temp', 0))
+                        max_temp = float(request.form.get('max_temp', 50))
+                        min_humidity = float(request.form.get('min_humidity', 0))
+                        max_humidity = float(request.form.get('max_humidity', 100))
+                        
+                        # Validate thresholds
+                        if min_temp >= max_temp:
+                            return redirect(url_for('manager_sensor_settings', error="Minimum temperature must be less than maximum"))
+                        if min_humidity >= max_humidity:
+                            return redirect(url_for('manager_sensor_settings', error="Minimum humidity must be less than maximum"))
+                        
+                        sensor.min_temp = min_temp
+                        sensor.max_temp = max_temp
+                        sensor.min_humidity = min_humidity
+                        sensor.max_humidity = max_humidity
+                        db_session.commit()
+                        
+                        log_info(f"Thresholds updated for sensor {sensor_id}", "Manager Settings")
+                        return redirect(url_for('manager_sensor_settings', success="Thresholds updated successfully"))
+                        
+                    except ValueError:
+                        return redirect(url_for('manager_sensor_settings', error="Invalid threshold values"))
+        
+        # GET request - show sensor settings page
+        with get_db_session_context() as db_session:
+            sensors = db_session.query(Sensor).all()
+            
+        return render_template('manager_sensor_settings.html',
+                             sensors=sensors,
+                             success=request.args.get('success'),
+                             error=request.args.get('error'))
+                             
+    except Exception as e:
+        log_warning(f"Error in sensor settings: {str(e)}", "Manager Settings")
+        return render_template('error.html', error="Failed to load sensor settings"), 500
+
+
+@app.route('/manager/settings/polling', methods=['POST'])
+@require_manager_auth
+def manager_polling_settings():
+    """
+    Handle polling interval configuration.
+    """
+    try:
+        interval_str = request.form.get('polling_interval', '').strip()
+        
+        if not interval_str:
+            return redirect(url_for('manager_settings', error="Polling interval is required"))
+        
+        try:
+            interval = int(interval_str)
+            if interval < 1:
+                return redirect(url_for('manager_settings', error="Polling interval must be at least 1 minute"))
+        except ValueError:
+            return redirect(url_for('manager_settings', error="Invalid polling interval"))
+        
+        # Update the polling interval setting
+        if SettingsManager.set_polling_interval(interval):
+            log_info(f"Polling interval updated to {interval} minutes", "Manager Settings")
+            return redirect(url_for('manager_settings', success=f"Polling interval updated to {interval} minutes"))
+        else:
+            return redirect(url_for('manager_settings', error="Failed to update polling interval"))
+            
+    except Exception as e:
+        log_warning(f"Error updating polling interval: {str(e)}", "Manager Settings")
+        return redirect(url_for('manager_settings', error="Error updating polling interval"))
+
+
+@app.errorhandler(404)
+def not_found(error):
+    """Handle 404 errors."""
+    log_warning(f"404 error: {request.url}", "Flask error handler")
+    return jsonify({
+        'success': False,
+        'error': 'Endpoint not found'
+    }), 404
+
+
+@app.errorhandler(405)
+def method_not_allowed(error):
+    """Handle 405 errors."""
+    log_warning(f"405 error: {request.method} {request.url}", "Flask error handler")
+    return jsonify({
+        'success': False,
+        'error': 'Method not allowed'
+    }), 405
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Handle 500 errors."""
+    error_handler = get_error_handler()
+    error_id = error_handler.log_and_store_error(error.original_exception if hasattr(error, 'original_exception') else Exception(str(error)), "Flask 500 error handler")
+    return jsonify(error_handler.get_user_friendly_error(error_id)), 500
+
+
+if __name__ == '__main__':
+    # Set up initial PIN from command line arguments
+    setup_initial_pin_from_args()
+    
+    # Run the Flask application
+    config = get_config()
+    log_info("Starting Flask application", "Flask startup")
+    # Initialize and start the polling service
+    polling_service = create_polling_service(config_class=config)
+    polling_service.start()
+
+    app.run(
+        debug=config.DEBUG,
+        host='0.0.0.0',
+        port=5000
+    )

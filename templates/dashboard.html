@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Bakery Sensors{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h2>Sensor Overview</h2>
+    
+    {% if sensors_data %}
+        <div class="sensor-grid">
+            {% for sensor_data in sensors_data %}
+                <div class="sensor-card">
+                    <div class="sensor-name">
+                        <span class="status-indicator {% if sensor_data.sensor.active %}status-active{% else %}status-inactive{% endif %}"></span>
+                        {{ sensor_data.sensor.name }}
+                    </div>
+                    
+                    {% if sensor_data.latest_reading %}
+                        {% set threshold = sensor_data.threshold_info %}
+                        
+                        <!-- Threshold Alert Banner -->
+                        {% if threshold.has_breach %}
+                            <div class="threshold-alert threshold-{{ threshold.breach_type }}">
+                                <span class="alert-icon">⚠️</span>
+                                <span class="alert-text">
+                                    {% if threshold.temperature_breach and threshold.humidity_breach %}
+                                        Temperature and humidity thresholds breached
+                                    {% elif threshold.temperature_breach %}
+                                        Temperature threshold breached ({{ threshold.temperature_breach }})
+                                    {% elif threshold.humidity_breach %}
+                                        Humidity threshold breached ({{ threshold.humidity_breach }})
+                                    {% endif %}
+                                </span>
+                            </div>
+                        {% endif %}
+                        
+                        <div class="reading-info">
+                            <span>Temperature:</span>
+                            <span class="reading-value temperature {% if threshold.temperature_breach %}breach-{{ threshold.temperature_breach }}{% endif %}">
+                                {{ "%.1f"|format(sensor_data.latest_reading.temperature) }}°C
+                                {% if threshold.temperature_breach %}
+                                    <span class="breach-indicator">
+                                        {% if threshold.temperature_breach == 'high' %}🔥{% else %}❄️{% endif %}
+                                    </span>
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="reading-info">
+                            <span>Humidity:</span>
+                            <span class="reading-value humidity {% if threshold.humidity_breach %}breach-{{ threshold.humidity_breach }}{% endif %}">
+                                {{ "%.1f"|format(sensor_data.latest_reading.humidity) }}%
+                                {% if threshold.humidity_breach %}
+                                    <span class="breach-indicator">
+                                        {% if threshold.humidity_breach == 'high' %}💧{% else %}🏜️{% endif %}
+                                    </span>
+                                {% endif %}
+                            </span>
+                        </div>
+                        
+                        <div class="timestamp">
+                            Last updated: {{ sensor_data.latest_reading.timestamp|localtime }}
+                        </div>
+                    {% else %}
+                        <div class="no-data">No recent readings available</div>
+                    {% endif %}
+                    
+                    <a href="/sensor/{{ sensor_data.sensor.sensor_id }}" class="btn">View Details</a>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="no-data">
+            <h3>No active sensors found</h3>
+            <p>Make sure the polling service is running and sensors are configured.</p>
+        </div>
+    {% endif %}
+    
+    
+    <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e1e5e9;">
+        <h3>Manager Access</h3>
+        <p>Managers can access additional settings and configuration options.</p>
+        <a href="{{ url_for('manager_login') }}" class="btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin-top: 0.5rem;">Manager Login</a>
+    </div>
+</div>
+{% endblock %}

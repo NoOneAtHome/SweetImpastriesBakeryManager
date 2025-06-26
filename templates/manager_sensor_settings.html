@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensor Settings - Manager Panel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn-warning:hover {
+            background: #e0a800;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #28a745;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #dc3545;
+        }
+
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+        }
+
+        .sensor-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e1e5e9;
+        }
+
+        .sensor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f2f5;
+        }
+
+        .sensor-name {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .sensor-id {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .threshold-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .threshold-section h4 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        .collapsible {
+            background: #f8f9fa;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .collapsible-header {
+            padding: 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .collapsible-header:hover {
+            background: #e9ecef;
+        }
+
+        .collapsible-content {
+            padding: 0 15px 15px;
+            display: none;
+        }
+
+        .collapsible.active .collapsible-content {
+            display: block;
+        }
+
+        .collapsible-toggle {
+            transition: transform 0.3s ease;
+        }
+
+        .collapsible.active .collapsible-toggle {
+            transform: rotate(180deg);
+        }
+
+        @media (max-width: 768px) {
+            .sensor-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header-content {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+            
+            .header-actions {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>Sensor Management</h1>
+            <div class="header-actions">
+                <a href="{{ url_for('manager_settings') }}" class="btn btn-secondary">Back to Settings</a>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">Dashboard</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        {% if success %}
+            <div class="success-message">
+                {{ success }}
+            </div>
+        {% endif %}
+
+        {% if error %}
+            <div class="error-message">
+                {{ error }}
+            </div>
+        {% endif %}
+
+        <div class="sensor-grid">
+            {% for sensor in sensors %}
+                <div class="sensor-card">
+                    <div class="sensor-header">
+                        <div>
+                            <div class="sensor-name">{{ sensor.name }}</div>
+                            <div class="sensor-id">ID: {{ sensor.sensor_id }}</div>
+                        </div>
+                        <span class="status-badge {% if sensor.active %}status-active{% else %}status-inactive{% endif %}">
+                            {% if sensor.active %}Active{% else %}Inactive{% endif %}
+                        </span>
+                    </div>
+
+                    <!-- Rename Sensor -->
+                    <div class="collapsible">
+                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                            <span>Rename Sensor</span>
+                            <span class="collapsible-toggle">▼</span>
+                        </div>
+                        <div class="collapsible-content">
+                            <form method="POST" action="{{ url_for('manager_sensor_settings') }}">
+                                <input type="hidden" name="sensor_id" value="{{ sensor.sensor_id }}">
+                                <input type="hidden" name="action" value="rename">
+                                <div class="form-group">
+                                    <label for="new_name_{{ sensor.sensor_id }}">New Name</label>
+                                    <input 
+                                        type="text" 
+                                        id="new_name_{{ sensor.sensor_id }}" 
+                                        name="new_name" 
+                                        value="{{ sensor.name }}"
+                                        required
+                                    >
+                                </div>
+                                <button type="submit" class="btn-primary btn-small">Update Name</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Threshold Settings -->
+                    <div class="collapsible">
+                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                            <span>Threshold Settings</span>
+                            <span class="collapsible-toggle">▼</span>
+                        </div>
+                        <div class="collapsible-content">
+                            <form method="POST" action="{{ url_for('manager_sensor_settings') }}">
+                                <input type="hidden" name="sensor_id" value="{{ sensor.sensor_id }}">
+                                <input type="hidden" name="action" value="update_thresholds">
+                                
+                                <div class="threshold-section">
+                                    <h4>Temperature Thresholds (°C)</h4>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="min_temp_{{ sensor.sensor_id }}">Minimum</label>
+                                            <input 
+                                                type="number" 
+                                                id="min_temp_{{ sensor.sensor_id }}" 
+                                                name="min_temp" 
+                                                value="{{ sensor.min_temp }}"
+                                                step="0.1"
+                                                required
+                                            >
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="max_temp_{{ sensor.sensor_id }}">Maximum</label>
+                                            <input 
+                                                type="number" 
+                                                id="max_temp_{{ sensor.sensor_id }}" 
+                                                name="max_temp" 
+                                                value="{{ sensor.max_temp }}"
+                                                step="0.1"
+                                                required
+                                            >
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="threshold-section">
+                                    <h4>Humidity Thresholds (%)</h4>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="min_humidity_{{ sensor.sensor_id }}">Minimum</label>
+                                            <input 
+                                                type="number" 
+                                                id="min_humidity_{{ sensor.sensor_id }}" 
+                                                name="min_humidity" 
+                                                value="{{ sensor.min_humidity }}"
+                                                step="0.1"
+                                                min="0"
+                                                max="100"
+                                                required
+                                            >
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="max_humidity_{{ sensor.sensor_id }}">Maximum</label>
+                                            <input 
+                                                type="number" 
+                                                id="max_humidity_{{ sensor.sensor_id }}" 
+                                                name="max_humidity" 
+                                                value="{{ sensor.max_humidity }}"
+                                                step="0.1"
+                                                min="0"
+                                                max="100"
+                                                required
+                                            >
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button type="submit" class="btn-primary btn-small">Update Thresholds</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="action-buttons">
+                        <form method="POST" action="{{ url_for('manager_sensor_settings') }}" style="display: inline;">
+                            <input type="hidden" name="sensor_id" value="{{ sensor.sensor_id }}">
+                            <input type="hidden" name="action" value="toggle_active">
+                            {% if sensor.active %}
+                                <button type="submit" class="btn-warning btn-small" onclick="return confirm('Are you sure you want to deactivate this sensor?')">
+                                    Deactivate
+                                </button>
+                            {% else %}
+                                <button type="submit" class="btn-success btn-small">
+                                    Activate
+                                </button>
+                            {% endif %}
+                        </form>
+                        
+                        <a href="{{ url_for('sensor_detail', sensor_id=sensor.sensor_id) }}" class="btn btn-secondary btn-small">
+                            View Details
+                        </a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        {% if not sensors %}
+            <div style="text-align: center; padding: 50px; color: #666;">
+                <h3>No sensors found</h3>
+                <p>Sensors will appear here once the polling service discovers them.</p>
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        function toggleCollapsible(header) {
+            const collapsible = header.parentElement;
+            collapsible.classList.toggle('active');
+        }
+
+        // Form validation
+        document.addEventListener('DOMContentLoaded', function() {
+            const forms = document.querySelectorAll('form');
+            
+            forms.forEach(form => {
+                form.addEventListener('submit', function(e) {
+                    const action = form.querySelector('input[name="action"]').value;
+                    
+                    if (action === 'update_thresholds') {
+                        const minTemp = parseFloat(form.querySelector('input[name="min_temp"]').value);
+                        const maxTemp = parseFloat(form.querySelector('input[name="max_temp"]').value);
+                        const minHumidity = parseFloat(form.querySelector('input[name="min_humidity"]').value);
+                        const maxHumidity = parseFloat(form.querySelector('input[name="max_humidity"]').value);
+                        
+                        if (minTemp >= maxTemp) {
+                            e.preventDefault();
+                            alert('Minimum temperature must be less than maximum temperature');
+                            return false;
+                        }
+                        
+                        if (minHumidity >= maxHumidity) {
+                            e.preventDefault();
+                            alert('Minimum humidity must be less than maximum humidity');
+                            return false;
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

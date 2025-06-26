@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}{{ sensor.name }} - Bakery Sensors{% endblock %}
+
+{% block header %}{{ sensor.name }} Details{% endblock %}
+
+{% block content %}
+<div class="sensor-detail">
+    <div class="sensor-info" style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 2rem;">
+        <h2>
+            <span class="status-indicator {% if sensor.active %}status-active{% else %}status-inactive{% endif %}"></span>
+            {{ sensor.name }}
+        </h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem;">
+            <div>
+                <strong>Sensor ID:</strong> {{ sensor.sensor_id }}
+            </div>
+            <div>
+                <strong>Status:</strong> 
+                {% if sensor.active %}
+                    <span style="color: #28a745;">Active</span>
+                {% else %}
+                    <span style="color: #dc3545;">Inactive</span>
+                {% endif %}
+            </div>
+            {% if sensor.min_temp is not none %}
+            <div>
+                <strong>Temp Range:</strong> {{ sensor.min_temp }}°C - {{ sensor.max_temp }}°C
+            </div>
+            {% endif %}
+            {% if sensor.min_humidity is not none %}
+            <div>
+                <strong>Humidity Range:</strong> {{ sensor.min_humidity }}% - {{ sensor.max_humidity }}%
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div style="margin-bottom: 1rem;">
+        <a href="/" class="btn">← Back to Dashboard</a>
+        <a href="/api/sensors/history?sensor_id={{ sensor.sensor_id }}&time_slice=24h" class="btn" target="_blank">View API Data</a>
+    </div>
+    
+    {% if readings %}
+        <h3>Recent Readings (Last 24 Hours)</h3>
+        <div style="overflow-x: auto;">
+            <table class="readings-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Temperature (°C)</th>
+                        <th>Humidity (%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for reading in readings %}
+                    <tr>
+                        <td>{{ reading.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td class="temperature">{{ "%.1f"|format(reading.temperature) }}</td>
+                        <td class="humidity">{{ "%.1f"|format(reading.humidity) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div style="margin-top: 1rem; color: #666; font-size: 0.9rem;">
+            Showing {{ readings|length }} readings from the last 24 hours
+        </div>
+    {% else %}
+        <div class="no-data" style="text-align: center; padding: 2rem;">
+            <h3>No Recent Readings</h3>
+            <p>No readings found for this sensor in the last 24 hours.</p>
+            <p>Make sure the polling service is running and the sensor is active.</p>
+        </div>
+    {% endif %}
+    
+    <div style="margin-top: 2rem; padding: 1rem; background: #f8f9fa; border-radius: 5px;">
+        <h4>Available Time Ranges</h4>
+        <p>You can view different time ranges using the API:</p>
+        <ul style="margin-top: 0.5rem;">
+            <li><a href="/api/sensors/history?sensor_id={{ sensor.sensor_id }}&time_slice=last_hour" target="_blank">Last Hour</a></li>
+            <li><a href="/api/sensors/history?sensor_id={{ sensor.sensor_id }}&time_slice=today" target="_blank">Today</a></li>
+            <li><a href="/api/sensors/history?sensor_id={{ sensor.sensor_id }}&time_slice=24h" target="_blank">Last 24 Hours</a></li>
+            <li><a href="/api/sensors/history?sensor_id={{ sensor.sensor_id }}&time_slice=7d" target="_blank">Last 7 Days</a></li>
+            <li><a href="/api/sensors/history?sensor_id={{ sensor.sensor_id }}&time_slice=30d" target="_blank">Last 30 Days</a></li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
