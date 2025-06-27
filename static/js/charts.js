@@ -408,7 +408,7 @@ function createChartConfig(processedData, title, hourlyAverage = false, isMultiS
  * @param {string} title - Chart title
  * @param {boolean} hourlyAverage - Whether to display hourly averaged data
  */
-async function renderSensorChart(canvasId, sensorId, timeSlice = '12h', title = 'Sensor Data', hourlyAverage = true) {
+async function renderSensorChart(canvasId, sensorId, timeSlice = 'today', title = 'Sensor Data', hourlyAverage = true) {
     try {
         const canvas = document.getElementById(canvasId);
         if (!canvas) {

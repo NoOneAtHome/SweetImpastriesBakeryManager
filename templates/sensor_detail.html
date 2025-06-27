@@ -44,18 +44,18 @@
     <!-- Chart Container for Sensor Detail -->
     <div style="margin-bottom: 2rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
-            <h3 style="color: #667eea; margin: 0;">{{ sensor.name }} - Historical Data</h3>
+            <h3 style="color: #002B5B; margin: 0;">{{ sensor.name }} - Historical Data</h3>
             <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
                 <div class="hourly-average-control">
-                    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: #667eea;">
-                        <input type="checkbox" id="hourlyAverageCheckbox" onchange="toggleHourlyAverage()" style="margin: 0;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: #002B5B;">
+                        <input type="checkbox" id="hourlyAverageCheckbox" onchange="toggleHourlyAverage()" style="margin: 0;" checked>
                         Average over hour
                     </label>
                 </div>
                 <div class="time-slice-controls">
                     <button class="time-slice-btn" data-slice="last_hour" onclick="updateSensorChart('last_hour')">Last Hour</button>
-                    <button class="time-slice-btn" data-slice="today" onclick="updateSensorChart('today')">Today</button>
-                    <button class="time-slice-btn active" data-slice="24h" onclick="updateSensorChart('24h')">24h</button>
+                    <button class="time-slice-btn active" data-slice="today" onclick="updateSensorChart('today')">Today</button>
+                    <button class="time-slice-btn" data-slice="24h" onclick="updateSensorChart('24h')">24h</button>
                     <button class="time-slice-btn" data-slice="7d" onclick="updateSensorChart('7d')">7d</button>
                     <button class="time-slice-btn" data-slice="30d" onclick="updateSensorChart('30d')">30d</button>
                 </div>
@@ -122,9 +122,9 @@
 
 .time-slice-btn {
     padding: 0.5rem 1rem;
-    border: 2px solid #667eea;
+    border: 2px solid #002B5B;
     background: white;
-    color: #667eea;
+    color: #002B5B;
     border-radius: 5px;
     cursor: pointer;
     font-size: 0.9rem;
@@ -133,12 +133,12 @@
 }
 
 .time-slice-btn:hover {
-    background: #667eea;
+    background: #002B5B;
     color: white;
 }
 
 .time-slice-btn.active {
-    background: #667eea;
+    background: #002B5B;
     color: white;
 }
 
@@ -157,8 +157,8 @@
 
 <script>
 // Sensor detail chart functionality
-let currentSensorTimeSlice = '24h';
-let currentHourlyAverage = false;
+let currentSensorTimeSlice = 'today';
+let currentHourlyAverage = true;
 const sensorId = '{{ sensor.sensor_id }}';
 
 function updateSensorChart(timeSlice) {
@@ -191,7 +191,7 @@ function renderChartWithCurrentSettings() {
 // Initialize sensor detail chart when page loads
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Initializing sensor detail chart for sensor:', sensorId);
-    updateSensorChart('24h');
+    updateSensorChart('today');
 });
 </script>
 {% endblock %}

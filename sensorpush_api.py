@@ -615,9 +615,12 @@ class SensorPushAPI:
             self.logger.debug(f"Devices/sensors request parameters: {params}")
 
             # Make authenticated request to devices/sensors endpoint
+            # Note: This endpoint requires POST with empty JSON body like samples endpoint
+            self.logger.debug(f"Making POST request to devices/sensors with empty JSON body")
             response = self.make_authenticated_request(
-                method='GET',
-                endpoint='devices/sensors'
+                method='POST',
+                endpoint='devices/sensors',
+                json={}
             )
             
             # Parse and return response

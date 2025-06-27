@@ -10,10 +10,10 @@
     {% if sensors_data %}
     <div style="margin-bottom: 1rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-            <h3 style="color: #667eea; margin: 0;">Sensor Data Overview</h3>
+            <h3 style="color: #002B5B; margin: 0;">Sensor Data Overview</h3>
             <div style="display: flex; align-items: center; gap: 1rem;">
                 <div class="hourly-average-control">
-                    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: #667eea; cursor: pointer;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: #002B5B; cursor: pointer;">
                         <input type="checkbox" id="hourlyAverageCheckbox" checked style="cursor: pointer;">
                         <span>Average over hour</span>
                     </label>
@@ -103,11 +103,6 @@
         </div>
     {% endif %}
     
-    <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e1e5e9;">
-        <h3>Manager Access</h3>
-        <p>Managers can access additional settings and configuration options.</p>
-        <a href="{{ url_for('manager_login') }}" class="btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin-top: 0.5rem;">Manager Login</a>
-    </div>
 </div>
 
 <style>
@@ -118,9 +113,9 @@
 
 .time-slice-btn {
     padding: 0.5rem 1rem;
-    border: 2px solid #667eea;
+    border: 2px solid #002B5B;
     background: white;
-    color: #667eea;
+    color: #002B5B;
     border-radius: 5px;
     cursor: pointer;
     font-size: 0.9rem;
@@ -129,12 +124,12 @@
 }
 
 .time-slice-btn:hover {
-    background: #667eea;
+    background: #002B5B;
     color: white;
 }
 
 .time-slice-btn.active {
-    background: #667eea;
+    background: #002B5B;
     color: white;
 }
 </style>
