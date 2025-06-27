@@ -24,6 +24,7 @@ from error_handling import handle_flask_error, log_info, log_warning, get_error_
 from polling_service import PollingService, create_polling_service # Import PollingService
 from auth import auth_manager, require_manager_auth, setup_initial_pin_from_args, AuthenticationError, AccountLockoutError
 from settings_manager import SettingsManager, check_threshold_breach
+from sensorpush_api import SensorPushAPI
 
 def create_app(config_name=None):
     """
@@ -891,6 +892,75 @@ def manager_sensor_settings():
     except Exception as e:
         log_warning(f"Error in sensor settings: {str(e)}", "Manager Settings")
         return render_template('error.html', error="Failed to load sensor settings"), 500
+
+
+@app.route('/manager/sensors/refetch_names', methods=['POST'])
+@require_manager_auth
+def refetch_sensor_names():
+    """
+    Refetch sensor names from the SensorPush API and update them in the local database.
+    
+    This route fetches the latest sensor metadata from the SensorPush API,
+    compares the names with those stored locally, and updates any differences.
+    
+    Returns:
+        Redirect to manager_sensor_settings with success/error message
+    """
+    try:
+        log_info("Starting sensor name refetch operation", "Refetch Sensor Names")
+        
+        # Get configuration for SensorPush API
+        config = get_config()
+        
+        # Initialize SensorPush API client
+        api_client = SensorPushAPI(config_class=config)
+        
+        # Authenticate with SensorPush API first
+        if not api_client.authenticate():
+            raise Exception("Failed to authenticate with SensorPush API")
+        
+        # Fetch latest sensor metadata from SensorPush API
+        sensors_data = api_client.get_devices_sensors()
+        
+        updated_count = 0
+        
+        # Process sensor data and update local database
+        with get_db_session_context() as db_session:
+            for sensor_id, sensor_info in sensors_data.items():
+                # Extract sensor name from API response
+                api_sensor_name = sensor_info.get('name', f'Sensor {sensor_id}')
+                
+                # Find corresponding sensor in local database
+                local_sensor = db_session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+                
+                if local_sensor:
+                    # Check if name differs and update if necessary
+                    if local_sensor.name != api_sensor_name:
+                        old_name = local_sensor.name
+                        local_sensor.name = api_sensor_name
+                        updated_count += 1
+                        log_info(f"Updated sensor {sensor_id} name from '{old_name}' to '{api_sensor_name}'", "Refetch Sensor Names")
+                else:
+                    log_info(f"Sensor {sensor_id} found in API but not in local database", "Refetch Sensor Names")
+            
+            # Commit all changes to database
+            db_session.commit()
+        
+        # Prepare success message
+        if updated_count > 0:
+            success_message = f"Successfully updated {updated_count} sensor name(s) from SensorPush API"
+        else:
+            success_message = "All sensor names are already up to date"
+        
+        log_info(f"Sensor name refetch completed. Updated {updated_count} sensors", "Refetch Sensor Names")
+        flash(success_message, 'success')
+        return redirect(url_for('manager_sensor_settings', success=success_message))
+        
+    except Exception as e:
+        error_message = f"Failed to refetch sensor names: {str(e)}"
+        log_warning(error_message, "Refetch Sensor Names")
+        flash(error_message, 'error')
+        return redirect(url_for('manager_sensor_settings', error=error_message))
 
 
 @app.route('/manager/settings/polling', methods=['POST'])
