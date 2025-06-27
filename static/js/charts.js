@@ -124,7 +124,7 @@ function calculateTimeRange(timeSlice) {
             startTime = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000)); // 30 days ago
             break;
         default:
-            startTime = new Date(now.getTime() - (24 * 60 * 60 * 1000)); // Default to 24h
+            startTime = new Date(now.getTime() - (12 * 60 * 60 * 1000)); // Default to 12h
     }
     
     return {
@@ -408,7 +408,7 @@ function createChartConfig(processedData, title, hourlyAverage = false, isMultiS
  * @param {string} title - Chart title
  * @param {boolean} hourlyAverage - Whether to display hourly averaged data
  */
-async function renderSensorChart(canvasId, sensorId, timeSlice = '24h', title = 'Sensor Data', hourlyAverage = false) {
+async function renderSensorChart(canvasId, sensorId, timeSlice = '12h', title = 'Sensor Data', hourlyAverage = true) {
     try {
         const canvas = document.getElementById(canvasId);
         if (!canvas) {
@@ -513,7 +513,7 @@ function resetChartZoom(canvasId) {
  * @param {string} timeSlice - Time slice for data range
  * @param {boolean} hourlyAverage - Whether to display hourly averaged data
  */
-async function renderDashboardChart(sensorIds, timeSlice = '24h', hourlyAverage = false) {
+async function renderDashboardChart(sensorIds, timeSlice = '12h', hourlyAverage = true) {
     try {
         const canvas = document.getElementById('dashboardChart');
         if (!canvas) {
@@ -623,7 +623,7 @@ function getTimeSliceLabel(timeSlice) {
         '7d': 'Last 7 Days',
         '30d': 'Last 30 Days'
     };
-    return labels[timeSlice] || 'Last 24 Hours';
+    return labels[timeSlice] || 'Last 12 Hours';
 }
 
 // Export functions for global access
