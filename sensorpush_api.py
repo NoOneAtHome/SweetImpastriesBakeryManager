@@ -262,7 +262,7 @@ class SensorPushAPI:
     
     def make_authenticated_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         """
-        Make an authenticated request to the SensorPush API.
+        Make an authenticated request to the SensorPush API with automatic token refresh retry.
         
         Args:
             method: HTTP method (GET, POST, etc.)
@@ -275,53 +275,82 @@ class SensorPushAPI:
         Raises:
             AuthenticationError: If authentication fails
             APIConnectionError: If there are connection issues
-            TokenExpiredError: If token expires during request
+            TokenExpiredError: If token expires and retry fails
         """
-        # Ensure we have a valid token
-        self.ensure_valid_token()
+        max_retries = 1  # Allow one retry after a 401
+        retry_count = 0
         
-        # Prepare request
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        headers = kwargs.pop('headers', {})
-        headers.update(self.get_auth_headers())
+        # Store original kwargs to preserve them for retry
+        original_kwargs = kwargs.copy()
         
-        try:
-            self.logger.debug(f"Making authenticated request: {method} {url}")
-            self.logger.debug(f"Request Headers: {headers}")
-            if 'json' in kwargs:
-                self.logger.debug(f"Request Body (JSON): {json.dumps(kwargs['json'])}")
-            elif 'data' in kwargs:
-                self.logger.debug(f"Request Body (Data): {kwargs['data']}")
+        while retry_count <= max_retries:
+            try:
+                # Ensure we have a valid token (proactive check)
+                self.ensure_valid_token()
+                
+                # Prepare request
+                url = f"{self.base_url}/{endpoint.lstrip('/')}"
+                headers = original_kwargs.pop('headers', {}) if retry_count == 0 else {}
+                headers.update(self.get_auth_headers())
+                
+                # Use original_kwargs for the request to preserve parameters on retry
+                request_kwargs = original_kwargs.copy()
+                timeout = request_kwargs.pop('timeout', 30)
+                
+                self.logger.debug(f"Making authenticated request (attempt {retry_count + 1}): {method} {url}")
+                self.logger.debug(f"Request Headers: {headers}")
+                if 'json' in request_kwargs:
+                    self.logger.debug(f"Request Body (JSON): {json.dumps(request_kwargs['json'])}")
+                elif 'data' in request_kwargs:
+                    self.logger.debug(f"Request Body (Data): {request_kwargs['data']}")
 
-            # Make request
-            response = self.session.request(
-                method=method,
-                url=url,
-                headers=headers,
-                timeout=kwargs.pop('timeout', 30),
-                **kwargs
-            )
-            self.logger.debug(f"Response Status Code: {response.status_code}")
-            self.logger.debug(f"Response Headers: {response.headers}")
-            self.logger.debug(f"Response Body: {response.text}")
-            
-            # Check for token expiration
-            if response.status_code == 401:
-                self.logger.warning("Received 401, token may have expired")
-                self._access_token = None  # Clear invalid token
-                raise TokenExpiredError("Access token expired")
-            
-            # Check for other HTTP errors
-            response.raise_for_status()
-            
-            return response
-            
-        except ConnectionError as e:
-            raise APIConnectionError(f"Connection error: {e}")
-        except Timeout as e:
-            raise APIConnectionError(f"Request timeout: {e}")
-        except RequestException as e:
-            raise APIConnectionError(f"Request error: {e}")
+                # Make request
+                response = self.session.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    timeout=timeout,
+                    **request_kwargs
+                )
+                self.logger.debug(f"Response Status Code: {response.status_code}")
+                self.logger.debug(f"Response Headers: {response.headers}")
+                self.logger.debug(f"Response Body: {response.text}")
+                
+                # Check for token expiration (reactive check)
+                if response.status_code == 401:
+                    self.logger.warning("Received 401, token may have expired. Attempting refresh and retry.")
+                    self._access_token = None  # Clear invalid token
+                    
+                    if retry_count < max_retries:
+                        retry_count += 1
+                        self.logger.info(f"Attempting token refresh and retry (attempt {retry_count + 1})")
+                        # The next iteration will call ensure_valid_token() which will re-authenticate
+                        continue
+                    else:
+                        # If max retries reached, raise the error
+                        raise TokenExpiredError("Access token expired after retry attempt")
+                
+                # Check for other HTTP errors
+                response.raise_for_status()
+                
+                return response
+                
+            except TokenExpiredError:
+                # Re-raise TokenExpiredError to propagate to caller
+                raise
+            except AuthenticationError as e:
+                # Authentication failed during refresh - this is a critical error
+                self.logger.error(f"Authentication failed during token refresh: {e}")
+                raise
+            except ConnectionError as e:
+                raise APIConnectionError(f"Connection error: {e}")
+            except Timeout as e:
+                raise APIConnectionError(f"Request timeout: {e}")
+            except RequestException as e:
+                raise APIConnectionError(f"Request error: {e}")
+        
+        # Should not be reached, but as a fallback
+        raise SensorPushAPIError("Failed to make authenticated request after retries")
     
     def get_token_info(self) -> Dict[str, Any]:
         """
