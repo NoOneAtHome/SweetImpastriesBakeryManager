@@ -5,16 +5,16 @@
 {% block header %}Error{% endblock %}
 
 {% block content %}
-<div class="error-page" style="text-align: center; padding: 2rem;">
-    <div class="error" style="max-width: 600px; margin: 0 auto;">
+<div class="error-page-container">
+    <div class="error error-content">
         <h2>Oops! Something went wrong</h2>
-        <p style="font-size: 1.1rem; margin: 1rem 0;">{{ error }}</p>
+        <p>{{ error }}</p>
         
-        <div style="margin-top: 2rem;">
+        <div class="error-back-button">
             <a href="/" class="btn">← Back to Dashboard</a>
         </div>
         
-        <div style="margin-top: 2rem; padding: 1rem; background: #f8f9fa; border-radius: 5px; text-align: left;">
+        <div class="troubleshooting-tips">
             <h4>Troubleshooting Tips:</h4>
             <ul style="margin-top: 0.5rem;">
                 <li>Make sure the polling service is running</li>
