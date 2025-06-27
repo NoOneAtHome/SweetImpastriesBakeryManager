@@ -314,12 +314,16 @@ class TestPollingServiceDataProcessing:
             mock_context.return_value.__enter__.return_value = mock_session
             mock_context.return_value.__exit__.return_value = None
             
-            # Mock existing sensor
+            # Mock existing sensor - need to handle multiple calls due to new logic
             existing_sensor = Mock()
-            mock_session.query.return_value.filter.return_value.first.return_value = existing_sensor
-            
-            # Mock duplicate reading check
-            mock_session.query.return_value.filter.return_value.first.side_effect = [existing_sensor, None, None, None]
+            # First pass: check for new sensors (2 calls for 2 sensors - both exist)
+            # Second pass: check for existing sensors during processing (2 calls for 2 sensors - both exist)
+            # Duplicate reading checks (3 calls for 3 readings - none are duplicates)
+            mock_session.query.return_value.filter.return_value.first.side_effect = [
+                existing_sensor, existing_sensor,  # First pass: both sensors exist
+                existing_sensor, existing_sensor,  # Second pass: both sensors exist
+                None, None, None  # Duplicate checks: no duplicates found
+            ]
             
             service._process_samples_data(mock_sensorpush_api_response)
             
@@ -337,8 +341,13 @@ class TestPollingServiceDataProcessing:
             # Mock existing sensor and duplicate readings
             existing_sensor = Mock()
             duplicate_reading = Mock()
+            # First pass: check for new sensors (2 calls for 2 sensors - both exist)
+            # Second pass: check for existing sensors during processing (2 calls for 2 sensors - both exist)
+            # Duplicate reading checks (3 calls for 3 readings - all are duplicates)
             mock_session.query.return_value.filter.return_value.first.side_effect = [
-                existing_sensor, duplicate_reading, duplicate_reading, duplicate_reading
+                existing_sensor, existing_sensor,  # First pass: both sensors exist
+                existing_sensor, existing_sensor,  # Second pass: both sensors exist
+                duplicate_reading, duplicate_reading, duplicate_reading  # Duplicate checks: all are duplicates
             ]
             
             service._process_samples_data(mock_sensorpush_api_response)

@@ -514,6 +514,77 @@ class SensorPushAPI:
             self.logger.error(error_msg)
             raise SensorPushAPIError(error_msg)
 
+    def get_sensors(self, **kwargs) -> Dict[str, Any]:
+        """
+        Retrieve sensor metadata from the /sensors endpoint.
+        
+        This endpoint provides sensor information including names, hardware models,
+        active status, and last seen timestamps.
+        
+        Args:
+            **kwargs: Optional parameters for the sensors request
+                
+        Returns:
+            dict: JSON response containing sensor metadata with names
+            
+        Raises:
+            AuthenticationError: If authentication fails
+            APIConnectionError: If there are connection issues
+            SensorPushAPIError: If API returns an error response
+        """
+        try:
+            self.logger.info("Fetching sensor metadata from SensorPush API")
+            
+            # Prepare request parameters
+            params = {}
+            if kwargs:
+                # Filter out None values and prepare parameters
+                for key, value in kwargs.items():
+                    if value is not None:
+                        params[key] = value
+            self.logger.debug(f"Sensors request parameters: {params}")
+
+            # Make authenticated request to sensors endpoint
+            response = self.make_authenticated_request(
+                method='GET',
+                endpoint='sensors'
+            )
+            
+            # Parse and return response
+            sensors_data = response.json()
+            
+            # Basic validation of response structure
+            if not isinstance(sensors_data, dict):
+                raise SensorPushAPIError("Invalid sensors response format")
+            
+            self.logger.info(f"Successfully retrieved sensor metadata for {len(sensors_data)} sensors")
+            return sensors_data
+            
+        except (AuthenticationError, APIConnectionError, TokenExpiredError):
+            # Re-raise these specific exceptions
+            raise
+        except HTTPError as e:
+            error_msg = f"HTTP error retrieving sensors: {e}"
+            if e.response.status_code == 400:
+                error_msg = "Bad request - check your parameters"
+            elif e.response.status_code == 403:
+                error_msg = "Forbidden - insufficient permissions"
+            elif e.response.status_code == 404:
+                error_msg = "Sensors endpoint not found"
+            elif e.response.status_code >= 500:
+                error_msg = "Server error - please try again later"
+            
+            self.logger.error(error_msg)
+            raise SensorPushAPIError(error_msg)
+        except json.JSONDecodeError as e:
+            error_msg = f"Invalid JSON response from sensors endpoint: {e}"
+            self.logger.error(error_msg)
+            raise SensorPushAPIError(error_msg)
+        except Exception as e:
+            error_msg = f"Unexpected error retrieving sensors: {e}"
+            self.logger.error(error_msg)
+            raise SensorPushAPIError(error_msg)
+
     def close(self):
         """Close the session and clean up resources."""
         if hasattr(self, 'session'):

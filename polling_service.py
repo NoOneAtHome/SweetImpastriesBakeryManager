@@ -199,6 +199,29 @@ class PollingService:
             log_warning(f"Unexpected error during data purge job with error ID: {error_id}", "PollingService._data_purge_job")
             raise
     
+    def _get_sensor_names(self) -> Dict[str, str]:
+        """
+        Fetch sensor names from the SensorPush API.
+        
+        Returns:
+            dict: Mapping of sensor_id to sensor name
+        """
+        try:
+            sensors_metadata = self.api_client.get_sensors()
+            sensor_names = {}
+            
+            for sensor_id, sensor_info in sensors_metadata.items():
+                # Extract sensor name from the metadata
+                sensor_name = sensor_info.get('name', f'Sensor {sensor_id}')
+                sensor_names[sensor_id] = sensor_name
+                
+            log_debug(f"Retrieved names for {len(sensor_names)} sensors", "PollingService._get_sensor_names")
+            return sensor_names
+            
+        except Exception as e:
+            log_warning(f"Failed to fetch sensor names: {e}. Will use generic names.", "PollingService._get_sensor_names")
+            return {}
+    
     def _process_samples_data(self, samples_data: Dict[str, Any]):
         """
         Process and store sensor samples data in the database.
@@ -212,6 +235,21 @@ class PollingService:
                 new_readings_count = 0
                 duplicate_readings_count = 0
                 
+                # Get sensor names from API for any new sensors we might need to create
+                sensor_names = {}
+                new_sensor_ids = []
+                
+                # First pass: identify sensors that don't exist in database
+                for sensor_id in sensors_data.keys():
+                    existing_sensor = session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+                    if not existing_sensor:
+                        new_sensor_ids.append(sensor_id)
+                
+                # Fetch sensor names if we have new sensors to create
+                if new_sensor_ids:
+                    sensor_names = self._get_sensor_names()
+                    log_debug(f"Fetched sensor names for {len(new_sensor_ids)} new sensors", "PollingService._process_samples_data")
+                
                 for sensor_id, readings in sensors_data.items():
                     if not isinstance(readings, list):
                         log_warning(f"Invalid readings format for sensor {sensor_id}", "PollingService._process_samples_data")
@@ -220,9 +258,12 @@ class PollingService:
                     # Ensure sensor exists in database (create if not exists)
                     existing_sensor = session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
                     if not existing_sensor:
+                        # Use actual sensor name from API if available, otherwise fallback to generic name
+                        sensor_name = sensor_names.get(sensor_id, f'Sensor {sensor_id}')
+                        
                         new_sensor = Sensor(
                             sensor_id=sensor_id,
-                            name=f'Sensor {sensor_id}',
+                            name=sensor_name,
                             active=True,
                             min_temp=0.0,  # Default minimum temperature
                             max_temp=50.0,  # Default maximum temperature
@@ -230,7 +271,7 @@ class PollingService:
                             max_humidity=100.0  # Default maximum humidity
                         )
                         session.add(new_sensor)
-                        log_debug(f"Created new sensor {sensor_id} from samples data", "PollingService._process_samples_data")
+                        log_debug(f"Created new sensor {sensor_id} with name '{sensor_name}' from samples data", "PollingService._process_samples_data")
                     
                     for reading in readings:
                         try:
@@ -311,6 +352,21 @@ class PollingService:
                 # Process sensor status and readings
                 sensors_data = status_data.get('sensors', {})
                 
+                # Get sensor names from API for any new sensors we might need to create
+                sensor_names = {}
+                new_sensor_ids = []
+                
+                # First pass: identify sensors that don't exist in database
+                for sensor_id in sensors_data.keys():
+                    existing_sensor = session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+                    if not existing_sensor:
+                        new_sensor_ids.append(sensor_id)
+                
+                # Fetch sensor names if we have new sensors to create
+                if new_sensor_ids:
+                    sensor_names = self._get_sensor_names()
+                    log_debug(f"Fetched sensor names for {len(new_sensor_ids)} new sensors", "PollingService._process_status_data")
+                
                 for sensor_id, sensor_status in sensors_data.items():
                     try:
                         # Extract sensor status information
@@ -331,11 +387,14 @@ class PollingService:
                                 sensors_updated += 1
                                 log_debug(f"Updated sensor {sensor_id} active status: {sensor_is_active}", "PollingService._process_status_data")
                         else:
-                            # Create new sensor if it doesn't exist (with generic name)
+                            # Create new sensor if it doesn't exist (use actual name from API)
                             sensor_is_active = sensor_active_status.lower() == 'active'
+                            # Use actual sensor name from API if available, otherwise fallback to generic name
+                            sensor_name = sensor_names.get(sensor_id, f'Sensor {sensor_id}')
+                            
                             new_sensor = Sensor(
                                 sensor_id=sensor_id,
-                                name=f'Sensor {sensor_id}',
+                                name=sensor_name,
                                 active=sensor_is_active,
                                 min_temp=0.0,  # Default minimum temperature
                                 max_temp=50.0,  # Default maximum temperature
@@ -344,7 +403,7 @@ class PollingService:
                             )
                             session.add(new_sensor)
                             sensors_updated += 1
-                            log_info(f"Created new sensor {sensor_id} from status data (status: {sensor_active_status})", "PollingService._process_status_data")
+                            log_info(f"Created new sensor {sensor_id} with name '{sensor_name}' from status data (status: {sensor_active_status})", "PollingService._process_status_data")
                         
                         # Add current reading if temperature and humidity are available
                         if temperature is not None and humidity is not None and timestamp:
