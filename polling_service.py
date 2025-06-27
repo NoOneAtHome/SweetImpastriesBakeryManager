@@ -72,7 +72,11 @@ class PollingService:
         self._successful_purges = 0
         self._failed_purges = 0
         
-        log_info(f"Polling service initialized with interval: {self.config.DEFAULT_POLLING_INTERVAL} minutes", "PollingService.__init__")
+        # Import SettingsManager and get polling interval from database
+        from settings_manager import SettingsManager
+        self.polling_interval = SettingsManager.get_polling_interval()
+        
+        log_info(f"Polling service initialized with interval: {self.polling_interval} minutes", "PollingService.__init__")
     
     def _job_listener(self, event):
         """
@@ -495,7 +499,7 @@ class PollingService:
             # Add polling job to scheduler
             self.scheduler.add_job(
                 func=self._polling_job,
-                trigger=IntervalTrigger(minutes=self.config.DEFAULT_POLLING_INTERVAL),
+                trigger=IntervalTrigger(minutes=self.polling_interval),
                 id=self._job_id,
                 name='SensorPush API Polling Job',
                 replace_existing=True,
@@ -580,7 +584,7 @@ class PollingService:
         """
         return {
             'is_running': self.is_running(),
-            'polling_interval_minutes': self.config.DEFAULT_POLLING_INTERVAL,
+            'polling_interval_minutes': self.polling_interval,
             'last_poll_time': self._last_poll_time.isoformat() if self._last_poll_time else None,
             'last_purge_time': self._last_purge_time.isoformat() if self._last_purge_time else None,
             'successful_polls': self._successful_polls,
@@ -664,6 +668,9 @@ class PollingService:
         
         try:
             log_info(f"Updating polling interval to {interval_minutes} minutes", "PollingService.update_polling_interval")
+            
+            # Update the instance variable
+            self.polling_interval = interval_minutes
             
             if self._is_running:
                 # Update the existing job

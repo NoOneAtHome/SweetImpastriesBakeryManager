@@ -60,6 +60,9 @@ def create_app(config_name=None):
     logging.basicConfig(level=config.LOG_LEVEL, stream=sys.stdout,
                         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     
+    # Initialize and store polling service in app context
+    app.polling_service = create_polling_service(config_class=config)
+    
     # Add custom Jinja2 filter for local time conversion
     @app.template_filter('localtime')
     def localtime_filter(utc_datetime):
@@ -916,11 +919,15 @@ def refetch_sensor_names():
         api_client = SensorPushAPI(config_class=config)
         
         # Authenticate with SensorPush API first
+        log_info("Attempting to authenticate with SensorPush API", "Refetch Sensor Names")
         if not api_client.authenticate():
             raise Exception("Failed to authenticate with SensorPush API")
+        log_info("Successfully authenticated with SensorPush API", "Refetch Sensor Names")
         
         # Fetch latest sensor metadata from SensorPush API
+        log_info("Calling get_devices_sensors() to fetch sensor metadata", "Refetch Sensor Names")
         sensors_data = api_client.get_devices_sensors()
+        log_info(f"Successfully retrieved sensor data: {len(sensors_data)} sensors", "Refetch Sensor Names")
         
         updated_count = 0
         
@@ -982,9 +989,16 @@ def manager_polling_settings():
         except ValueError:
             return redirect(url_for('manager_settings', error="Invalid polling interval"))
         
-        # Update the polling interval setting
+        # Update the polling interval setting in database
         if SettingsManager.set_polling_interval(interval):
-            log_info(f"Polling interval updated to {interval} minutes", "Manager Settings")
+            # Update the polling service with the new interval
+            from flask import current_app
+            if hasattr(current_app, 'polling_service'):
+                current_app.polling_service.update_polling_interval(interval)
+                log_info(f"Polling interval updated to {interval} minutes and applied to service", "Manager Settings")
+            else:
+                log_info(f"Polling interval updated to {interval} minutes in database", "Manager Settings")
+            
             return redirect(url_for('manager_settings', success=f"Polling interval updated to {interval} minutes"))
         else:
             return redirect(url_for('manager_settings', error="Failed to update polling interval"))
@@ -1029,9 +1043,9 @@ if __name__ == '__main__':
     # Run the Flask application
     config = get_config()
     log_info("Starting Flask application", "Flask startup")
-    # Initialize and start the polling service
-    polling_service = create_polling_service(config_class=config)
-    polling_service.start()
+    
+    # Start the polling service that was initialized in create_app
+    app.polling_service.start()
 
     app.run(
         debug=config.DEBUG,
