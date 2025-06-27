@@ -337,11 +337,9 @@
                 Refetch sensor names from the SensorPush API to update any changes made in the SensorPush app or web interface.
                 This will update the names of existing sensors in your local database to match those in your SensorPush account.
             </p>
-            <form method="POST" action="{{ url_for('refetch_sensor_names') }}" style="display: inline;">
-                <button type="submit" class="btn-primary" onclick="return confirm('This will update sensor names from the SensorPush API. Continue?')" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
-                    🔄 Refetch Sensor Names from API
-                </button>
-            </form>
+            <button type="button" id="refetchSensorNamesBtn" class="btn btn-primary" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+                🔄 Refetch Sensor Names
+            </button>
         </div>
 
         <div class="sensor-grid">
@@ -502,9 +500,10 @@
             
             forms.forEach(form => {
                 form.addEventListener('submit', function(e) {
-                    const action = form.querySelector('input[name="action"]').value;
+                    const action = form.querySelector('input[name="action"]');
+                    if (!action) return; // Skip forms without action input
                     
-                    if (action === 'update_thresholds') {
+                    if (action.value === 'update_thresholds') {
                         const minTemp = parseFloat(form.querySelector('input[name="min_temp"]').value);
                         const maxTemp = parseFloat(form.querySelector('input[name="max_temp"]').value);
                         const minHumidity = parseFloat(form.querySelector('input[name="min_humidity"]').value);
@@ -524,6 +523,50 @@
                     }
                 });
             });
+
+            // Refetch Sensor Names functionality
+            const refetchBtn = document.getElementById('refetchSensorNamesBtn');
+            if (refetchBtn) {
+                refetchBtn.addEventListener('click', async function() {
+                    // Confirm action
+                    if (!confirm('This will update sensor names from the SensorPush API. Continue?')) {
+                        return;
+                    }
+
+                    // Disable button and show loading state
+                    const originalText = refetchBtn.innerHTML;
+                    refetchBtn.disabled = true;
+                    refetchBtn.innerHTML = '⏳ Refetching...';
+
+                    try {
+                        const response = await fetch('/manager/sensors/refetch_names', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({})
+                        });
+
+                        if (response.ok) {
+                            // Success - reload the page to show updated sensor names
+                            window.location.reload();
+                        } else {
+                            // Handle HTTP error responses
+                            const errorData = await response.json().catch(() => ({}));
+                            const errorMessage = errorData.error || `Server error: ${response.status} ${response.statusText}`;
+                            alert(`Error refetching sensor names: ${errorMessage}`);
+                        }
+                    } catch (error) {
+                        // Handle network or other errors
+                        console.error('Error refetching sensor names:', error);
+                        alert('Error refetching sensor names: Network error or server unavailable');
+                    } finally {
+                        // Re-enable button and restore original text
+                        refetchBtn.disabled = false;
+                        refetchBtn.innerHTML = originalText;
+                    }
+                });
+            }
         });
     </script>
 </body>
