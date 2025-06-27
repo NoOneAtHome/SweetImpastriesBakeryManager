@@ -395,7 +395,7 @@ class SensorPushAPI:
             self.logger.info("Fetching sensor samples from SensorPush API")
             
             # Prepare request parameters
-            params = {}
+            params = {"limit": 1}  # Always include limit: 1
             if kwargs:
                 # Filter out None values and prepare parameters
                 for key, value in kwargs.items():
@@ -407,7 +407,7 @@ class SensorPushAPI:
             response = self.make_authenticated_request(
                 method='POST',
                 endpoint='samples',
-                json=params if params else {}
+                json=params
             )
             
             # Parse and return response
