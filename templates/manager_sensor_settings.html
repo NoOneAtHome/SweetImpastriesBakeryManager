@@ -8,10 +8,6 @@
 {% block header %}Sensor Management{% endblock %}
 {% block content %}
     <!-- Manager Sensor Settings Actions -->
-    <div class="manager-actions">
-        <a href="{{ url_for('manager_settings') }}" class="btn btn-secondary">Back to Settings</a>
-        <a href="{{ url_for('index') }}" class="btn btn-secondary">Dashboard</a>
-    </div>
 
     {% if success %}
         <div class="success-message">
@@ -32,7 +28,7 @@
             Refetch sensor names from the SensorPush API to update any changes made in the SensorPush app or web interface.
             This will update the names of existing sensors in your local database to match those in your SensorPush account.
         </p>
-        <button type="button" id="refetchSensorNamesBtn" class="btn btn-primary" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+        <button type="button" id="refetchSensorNamesBtn" class="btn btn-warning" >
             🔄 Refetch Sensor Names
         </button>
     </div>
@@ -157,17 +153,17 @@
                             <input type="hidden" name="sensor_id" value="{{ sensor.sensor_id }}">
                             <input type="hidden" name="action" value="toggle_active">
                             {% if sensor.active %}
-                                <button type="submit" class="btn-warning btn-small" onclick="return confirm('Are you sure you want to deactivate this sensor?')" style="margin: 0; vertical-align: top;">
+                                <button type="submit" class="btn-warning btn-small" onclick="return confirm('Are you sure you want to deactivate this sensor?')" >
                                     Deactivate
                                 </button>
                             {% else %}
-                                <button type="submit" class="btn-success btn-small" style="margin: 0; vertical-align: top;">
+                                <button type="submit" class="btn-success btn-small" >
                                     Activate
                                 </button>
                             {% endif %}
                         </form>
                         
-                        <a href="{{ url_for('sensor_detail', sensor_id=sensor.sensor_id) }}" class="btn btn-secondary btn-small" style="vertical-align: top;">
+                        <a href="{{ url_for('sensor_detail', sensor_id=sensor.sensor_id) }}" class="btn-secondary btn-small" >
                             View Details
                         </a>
                     </div>

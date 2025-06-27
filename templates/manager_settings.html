@@ -9,10 +9,7 @@
 
 {% block content %}
     <!-- Manager Settings Actions -->
-    <div class="manager-actions">
-        <a href="{{ url_for('index') }}" class="btn btn-secondary">Dashboard</a>
-        <a href="{{ url_for('manager_logout') }}" class="btn btn-danger">Logout</a>
-    </div>
+
         {% if success %}
             <div class="success-message">
                 {{ success }}

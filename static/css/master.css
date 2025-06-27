@@ -131,7 +131,7 @@ header h1 {
 }
 
 .sensor-card:hover {
-    transform: translateY(-5px);
+
     box-shadow: 0 8px 25px rgba(0,0,0,0.15);
 }
 
@@ -441,13 +441,6 @@ header h1 {
     transition: transform 0.2s ease;
 }
 
-.login-btn:hover {
-    transform: translateY(-2px);
-}
-
-.login-btn:active {
-    transform: translateY(0);
-}
 
 .error-message {
     background: #fee;
@@ -528,16 +521,17 @@ header h1 {
 }
 
 .btn-secondary:hover {
-    transform: translateY(-2px);
     box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
 }
-
+.btn-primary{
+    background-color: #002B5B !important;
+}
 .btn-primary,
 button[type="submit"],
 input[type="submit"] {
-    background: #002b5b !important;
-    color: white !important;
-    padding: 15px 30px !important;
+    
+    color: gainsboro !important;
+    padding: 15px !important;
     border: none !important;
     border-radius: 12px !important;
     font-size: 16px !important;
@@ -554,7 +548,7 @@ input[type="submit"] {
 .btn-primary:hover,
 button[type="submit"]:hover,
 input[type="submit"]:hover {
-    transform: translateY(-2px) !important;
+
     box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6) !important;
 }
 
@@ -574,7 +568,6 @@ input[type="submit"]:hover {
 }
 
 .btn-secondary:hover {
-    transform: translateY(-2px) !important;
     box-shadow: 0 8px 25px rgba(116, 185, 255, 0.6) !important;
 }
 
@@ -594,7 +587,6 @@ input[type="submit"]:hover {
 }
 
 .btn-danger:hover {
-    transform: translateY(-2px) !important;
     box-shadow: 0 8px 25px rgba(255, 107, 107, 0.6) !important;
 }
 
@@ -605,23 +597,21 @@ input[type="submit"]:hover {
 
 .btn-warning {
     background: #780000 !important;
-    color: white;
+    color: gainsboro;
     box-shadow: 0 4px 15px rgba(253, 203, 110, 0.4);
 }
 
 .btn-warning:hover {
-    transform: translateY(-2px);
     box-shadow: 0 8px 25px rgba(253, 203, 110, 0.6);
 }
 
 .btn-success {
-    background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
+    background: #004b23;
     color: white;
     box-shadow: 0 4px 15px rgba(0, 184, 148, 0.4);
 }
 
 .btn-success:hover {
-    transform: translateY(-2px);
     box-shadow: 0 8px 25px rgba(0, 184, 148, 0.6);
 }
 
@@ -766,7 +756,7 @@ input[type="submit"]:hover {
     outline: none;
     border-color: #667eea;
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    transform: translateY(-1px);
+   
 }
 
 .form-row {
@@ -883,7 +873,7 @@ input[type="submit"]:hover {
     border: 1px solid rgba(255, 255, 255, 0.2);
     position: relative;
     overflow: hidden;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+   
 }
 
 .settings-card::before {
@@ -897,7 +887,7 @@ input[type="submit"]:hover {
 }
 
 .settings-card:hover {
-    transform: translateY(-5px);
+
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
 }
 
@@ -922,12 +912,11 @@ input[type="submit"]:hover {
 }
 
 .info-box {
-    background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
-    color: white;
-    padding: 20px;
+    background: #002B5B;
+    color: gainsboro;
+    padding: 10px;
     border-radius: 15px;
     margin-bottom: 25px;
-    border-left: 4px solid #0984e3;
     box-shadow: 0 4px 15px rgba(116, 185, 255, 0.3);
 }
 
