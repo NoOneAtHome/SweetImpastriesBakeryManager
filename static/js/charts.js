@@ -143,7 +143,17 @@ function processDataForChart(rawData) {
     const temperatureData = [];
     
     rawData.forEach(reading => {
-        const timestamp = new Date(reading.timestamp);
+        // Ensure timestamp is parsed as UTC and then converted to local time
+        // The backend sends ISO strings with 'Z' suffix or '+00:00' timezone
+        let timestamp;
+        if (reading.timestamp.endsWith('Z') || reading.timestamp.includes('+')) {
+            // Already has timezone info, parse directly
+            timestamp = new Date(reading.timestamp);
+        } else {
+            // Assume UTC if no timezone info
+            timestamp = new Date(reading.timestamp + 'Z');
+        }
+        
         labels.push(timestamp);
         temperatureData.push(reading.temperature);
     });
@@ -184,11 +194,18 @@ function processMultiSensorDataForChart(multiSensorData) {
     // Collect all unique timestamps across all sensors
     Object.values(multiSensorData).forEach(sensorInfo => {
         sensorInfo.data.forEach(reading => {
-            allTimestamps.add(reading.timestamp);
+            // Ensure consistent timestamp parsing
+            let timestamp;
+            if (reading.timestamp.endsWith('Z') || reading.timestamp.includes('+')) {
+                timestamp = reading.timestamp;
+            } else {
+                timestamp = reading.timestamp + 'Z';
+            }
+            allTimestamps.add(timestamp);
         });
     });
     
-    // Sort timestamps
+    // Sort timestamps and convert to Date objects
     const sortedTimestamps = Array.from(allTimestamps).sort().map(ts => new Date(ts));
     
     // Create a dataset for each sensor
@@ -197,10 +214,22 @@ function processMultiSensorDataForChart(multiSensorData) {
         const color = SENSOR_COLORS[colorIndex % SENSOR_COLORS.length];
         
         // Create data points array with proper x,y format for Chart.js
-        const dataPoints = sensorInfo.data.map(reading => ({
-            x: new Date(reading.timestamp),
-            y: reading.temperature
-        }));
+        const dataPoints = sensorInfo.data.map(reading => {
+            // Ensure timestamp is parsed as UTC and then converted to local time
+            let timestamp;
+            if (reading.timestamp.endsWith('Z') || reading.timestamp.includes('+')) {
+                // Already has timezone info, parse directly
+                timestamp = new Date(reading.timestamp);
+            } else {
+                // Assume UTC if no timezone info
+                timestamp = new Date(reading.timestamp + 'Z');
+            }
+            
+            return {
+                x: timestamp,
+                y: reading.temperature
+            };
+        });
         
         // Convert hex color to rgba for background
         const hexToRgba = (hex, alpha) => {
@@ -319,6 +348,11 @@ function createChartConfig(processedData, title, hourlyAverage = false, isMultiS
             scales: {
                 x: {
                     type: 'time',
+                    adapters: {
+                        date: {
+                            zone: 'local'  // Force local timezone display
+                        }
+                    },
                     time: hourlyAverage ? {
                         unit: 'hour',
                         displayFormats: {
@@ -340,7 +374,7 @@ function createChartConfig(processedData, title, hourlyAverage = false, isMultiS
                     },
                     title: {
                         display: true,
-                        text: 'Time'
+                        text: 'Time (Local)'
                     }
                 },
                 y: {
