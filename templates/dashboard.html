@@ -14,15 +14,15 @@
             <div style="display: flex; align-items: center; gap: 1rem;">
                 <div class="hourly-average-control">
                     <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: #667eea; cursor: pointer;">
-                        <input type="checkbox" id="hourlyAverageCheckbox" style="cursor: pointer;">
+                        <input type="checkbox" id="hourlyAverageCheckbox" checked style="cursor: pointer;">
                         <span>Average over hour</span>
                     </label>
                 </div>
                 <div class="time-slice-controls">
                     <button class="time-slice-btn" data-slice="4h" onclick="updateDashboardChart('4h')">4h</button>
                     <button class="time-slice-btn" data-slice="8h" onclick="updateDashboardChart('8h')">8h</button>
-                    <button class="time-slice-btn" data-slice="12h" onclick="updateDashboardChart('12h')">12h</button>
-                    <button class="time-slice-btn active" data-slice="24h" onclick="updateDashboardChart('24h')">24h</button>
+                    <button class="time-slice-btn active" data-slice="12h" onclick="updateDashboardChart('12h')">12h</button>
+                    <button class="time-slice-btn" data-slice="24h" onclick="updateDashboardChart('24h')">24h</button>
                     <button class="time-slice-btn" data-slice="7d" onclick="updateDashboardChart('7d')">7d</button>
                     <button class="time-slice-btn" data-slice="30d" onclick="updateDashboardChart('30d')">30d</button>
                 </div>
@@ -142,7 +142,7 @@
 {% if sensors_data %}
 <script>
 // Dashboard chart functionality
-let currentDashboardTimeSlice = '24h';
+let currentDashboardTimeSlice = '12h';
 
 // Get all sensor IDs for the dashboard chart
 const allSensorIds = [
@@ -183,7 +183,7 @@ document.addEventListener('DOMContentLoaded', function() {
         hourlyAverageCheckbox.addEventListener('change', handleHourlyAverageChange);
     }
     
-    updateDashboardChart('24h');
+    updateDashboardChart('12h');
 });
 </script>
 {% endif %}
