@@ -212,6 +212,7 @@ function processMultiSensorDataForChart(multiSensorData) {
     let colorIndex = 0;
     Object.entries(multiSensorData).forEach(([sensorId, sensorInfo]) => {
         const sensorName = sensorInfo.name || sensorId;
+        const color = SENSOR_COLORS[colorIndex % SENSOR_COLORS.length];
         
         // Initialize arrays for warm and cold temperature data points
         const warmDataPoints = [];
@@ -256,8 +257,8 @@ function processMultiSensorDataForChart(multiSensorData) {
             datasets.push({
                 label: sensorName + ' (Warm)',
                 data: warmDataPoints,
-                borderColor: '#007e15',
-                backgroundColor: 'rgba(0, 126, 21, 0.1)',
+                borderColor: color,
+                backgroundColor: hexToRgba(color, 0.1),
                 borderWidth: 2,
                 fill: false,
                 tension: 0.1,
@@ -270,8 +271,8 @@ function processMultiSensorDataForChart(multiSensorData) {
             datasets.push({
                 label: sensorName + ' (Cold)',
                 data: coldDataPoints,
-                borderColor: '#0000FF',
-                backgroundColor: 'rgba(0, 0, 255, 0.1)',
+                borderColor: color,
+                backgroundColor: hexToRgba(color, 0.1),
                 borderWidth: 2,
                 fill: false,
                 tension: 0.1,
@@ -406,19 +407,6 @@ function createChartConfig(processedData, title, hourlyAverage = false, isMultiS
                         text: 'Time (Local)'
                     }
                 },
-                y: {
-                    type: 'linear',
-                    display: true,
-                    position: 'left',
-                    title: {
-                        display: true,
-                        text: 'Temperature (°C)',
-                        color: '#007e15'
-                    },
-                    grid: {
-                        drawOnChartArea: true,
-                    },
-                },
                 yWarm: {
                     id: 'yWarm',
                     type: 'linear',
@@ -429,7 +417,7 @@ function createChartConfig(processedData, title, hourlyAverage = false, isMultiS
                         color: '#007e15'
                     },
                     grid: {
-                        drawOnChartArea: false
+                        drawOnChartArea: true
                     },
                     min: 35
                 },
