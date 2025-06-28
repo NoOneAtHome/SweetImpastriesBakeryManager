@@ -208,13 +208,17 @@ function processMultiSensorDataForChart(multiSensorData) {
     // Sort timestamps and convert to Date objects
     const sortedTimestamps = Array.from(allTimestamps).sort().map(ts => new Date(ts));
     
-    // Create a dataset for each sensor
+    // Create datasets for each sensor with temperature-based separation
     let colorIndex = 0;
     Object.entries(multiSensorData).forEach(([sensorId, sensorInfo]) => {
-        const color = SENSOR_COLORS[colorIndex % SENSOR_COLORS.length];
+        const sensorName = sensorInfo.name || sensorId;
         
-        // Create data points array with proper x,y format for Chart.js
-        const dataPoints = sensorInfo.data.map(reading => {
+        // Initialize arrays for warm and cold temperature data points
+        const warmDataPoints = [];
+        const coldDataPoints = [];
+        
+        // Process each data point and categorize by temperature
+        sensorInfo.data.forEach(reading => {
             // Ensure timestamp is parsed as UTC and then converted to local time
             let timestamp;
             if (reading.timestamp.endsWith('Z') || reading.timestamp.includes('+')) {
@@ -225,10 +229,18 @@ function processMultiSensorDataForChart(multiSensorData) {
                 timestamp = new Date(reading.timestamp + 'Z');
             }
             
-            return {
+            const dataPoint = {
                 x: timestamp,
                 y: reading.temperature
             };
+            
+            // Categorize data points based on temperature thresholds
+            if (reading.temperature >= 35) {
+                warmDataPoints.push(dataPoint);
+            } else if (reading.temperature <= 5) {
+                coldDataPoints.push(dataPoint);
+            }
+            // Note: Temperatures between 5 and 35 degrees are not included in either dataset
         });
         
         // Convert hex color to rgba for background
@@ -239,16 +251,33 @@ function processMultiSensorDataForChart(multiSensorData) {
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         };
         
-        datasets.push({
-            label: sensorInfo.name || sensorId,
-            data: dataPoints,
-            borderColor: color,
-            backgroundColor: hexToRgba(color, 0.1),
-            borderWidth: 2,
-            fill: false,
-            tension: 0.1,
-            yAxisID: 'y'
-        });
+        // Create warm temperature dataset if there are warm data points
+        if (warmDataPoints.length > 0) {
+            datasets.push({
+                label: sensorName + ' (Warm)',
+                data: warmDataPoints,
+                borderColor: '#007e15',
+                backgroundColor: 'rgba(0, 126, 21, 0.1)',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1,
+                yAxisID: 'yWarm'
+            });
+        }
+        
+        // Create cold temperature dataset if there are cold data points
+        if (coldDataPoints.length > 0) {
+            datasets.push({
+                label: sensorName + ' (Cold)',
+                data: coldDataPoints,
+                borderColor: '#0000FF',
+                backgroundColor: 'rgba(0, 0, 255, 0.1)',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1,
+                yAxisID: 'yCold'
+            });
+        }
         
         colorIndex++;
     });
@@ -389,6 +418,34 @@ function createChartConfig(processedData, title, hourlyAverage = false, isMultiS
                     grid: {
                         drawOnChartArea: true,
                     },
+                },
+                yWarm: {
+                    id: 'yWarm',
+                    type: 'linear',
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Warm Temp (°C)',
+                        color: '#007e15'
+                    },
+                    grid: {
+                        drawOnChartArea: false
+                    },
+                    min: 35
+                },
+                yCold: {
+                    id: 'yCold',
+                    type: 'linear',
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Cold Temp (°C)',
+                        color: '#0000FF'
+                    },
+                    grid: {
+                        drawOnChartArea: false
+                    },
+                    max: 5
                 }
             },
             interaction: {
