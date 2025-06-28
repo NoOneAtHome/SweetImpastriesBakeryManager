@@ -60,9 +60,6 @@ def create_app(config_name=None):
     logging.basicConfig(level=config.LOG_LEVEL, stream=sys.stdout,
                         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     
-    # Initialize and store polling service in app context
-    app.polling_service = create_polling_service(config_class=config)
-    
     # Add custom Jinja2 filter for local time conversion
     @app.template_filter('localtime')
     def localtime_filter(utc_datetime):
@@ -1046,9 +1043,6 @@ if __name__ == '__main__':
     # Run the Flask application
     config = get_config()
     log_info("Starting Flask application", "Flask startup")
-    
-    # Start the polling service that was initialized in create_app
-    app.polling_service.start()
 
     app.run(
         debug=config.DEBUG,
