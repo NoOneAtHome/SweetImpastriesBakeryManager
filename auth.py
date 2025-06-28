@@ -102,9 +102,17 @@ class AuthManager:
         Returns:
             bool: True if setup successful, False if PIN already exists
         """
-        if pin is None:
-            pin = "000000"  # Development default
-            
+        # Check for MANAGER_PIN environment variable first
+        env_pin = os.environ.get('MANAGER_PIN')
+        if env_pin:
+            pin_to_use = env_pin
+            log_info("Using MANAGER_PIN from environment variable for initial setup.", "AuthManager.setup_initial_pin")
+        elif pin is not None:
+            pin_to_use = pin
+        else:
+            pin_to_use = "000000"  # Development default
+            log_info("Using default PIN for initial setup.", "AuthManager.setup_initial_pin")
+
         try:
             with get_db_session_context() as db_session:
                 # Check if PIN already exists
@@ -114,7 +122,7 @@ class AuthManager:
                     return False
                 
                 # Create new manager auth record
-                hashed_pin = self.hash_pin(pin)
+                hashed_pin = self.hash_pin(pin_to_use)
                 manager_auth = ManagerAuth(pin_hash=hashed_pin)
                 db_session.add(manager_auth)
                 db_session.commit()

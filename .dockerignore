@@ -1,0 +1,38 @@
+# Virtual environment
+.venv
+
+# Python cache files
+__pycache__
+*.pyc
+
+# Git repository
+.git
+
+# Log files
+*.log
+
+# Database directory
+db/
+
+# Test files
+tests/
+
+# Documentation
+docs/
+
+# Images
+images/
+
+# Flask session files
+flask_session/
+
+# Other common files to ignore
+.env
+.gitignore
+README.md
+*.md
+.pytest_cache
+.coverage
+htmlcov/
+.DS_Store
+Thumbs.db
