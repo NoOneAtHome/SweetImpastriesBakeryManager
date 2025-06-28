@@ -86,6 +86,9 @@ def create_app(config_name=None):
     # Register routes on this app instance
     register_routes(app)
     
+    # Set up initial manager PIN if needed (checks for MANAGER_PIN env var)
+    auth_manager.setup_initial_pin()
+    
     return app
 
 

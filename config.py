@@ -111,8 +111,10 @@ class ProductionConfig(Config):
         if cls.SECRET_KEY == 'dev-secret-key-change-in-production':
             missing_vars.append('SECRET_KEY (using default dev key)')
         
-        if not cls.MANAGER_PIN_HASH:
-            missing_vars.append('MANAGER_PIN_HASH')
+        # Only require MANAGER_PIN_HASH if MANAGER_PIN is not provided
+        manager_pin = os.getenv('MANAGER_PIN')
+        if not cls.MANAGER_PIN_HASH and not manager_pin:
+            missing_vars.append('MANAGER_PIN_HASH (or MANAGER_PIN for initial setup)')
         
         return missing_vars
 
