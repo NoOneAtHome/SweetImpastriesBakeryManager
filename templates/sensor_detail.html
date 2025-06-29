@@ -74,6 +74,7 @@
                         <th>Timestamp</th>
                         <th>Temperature (°C)</th>
                         <th>Humidity (%)</th>
+                        <th>Battery Voltage (V)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -82,6 +83,7 @@
                         <td>{{ reading.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                         <td class="temperature">{{ "%.1f"|format(reading.temperature) }}</td>
                         <td class="humidity">{{ "%.1f"|format(reading.humidity) }}</td>
+                        <td class="battery-voltage">{{ "%.2f"|format(reading.battery_voltage) if reading.battery_voltage is not none else 'N/A' }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

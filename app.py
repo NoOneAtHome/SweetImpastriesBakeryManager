@@ -26,13 +26,14 @@ from auth import auth_manager, require_manager_auth, setup_initial_pin_from_args
 from settings_manager import SettingsManager, check_threshold_breach
 from sensorpush_api import SensorPushAPI
 
-def create_app(config_name=None, config_class=None):
+def create_app(config_name=None, config_class=None, start_polling_service=True):
     """
     Create and configure the Flask application.
     
     Args:
         config_name (str, optional): Configuration name to use
         config_class (class, optional): Configuration class to use directly
+        start_polling_service (bool, optional): Whether to start the polling service (default: True)
         
     Returns:
         Flask: Configured Flask application instance
@@ -83,6 +84,34 @@ def create_app(config_name=None, config_class=None):
         
         # Format and return as string
         return local_time.strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Initialize and start the polling service if requested
+    if start_polling_service:
+        try:
+            log_info("Initializing polling service within Flask application", "Flask App Factory")
+            app.polling_service = create_polling_service(config_class=config)
+            
+            # Start the polling service
+            if app.polling_service.start():
+                log_info("Polling service started successfully within Flask application", "Flask App Factory")
+            else:
+                log_warning("Failed to start polling service within Flask application", "Flask App Factory")
+                
+        except Exception as e:
+            log_warning(f"Error initializing polling service: {e}", "Flask App Factory")
+            # Don't fail app creation if polling service fails
+            app.polling_service = None
+    else:
+        log_info("Polling service initialization skipped", "Flask App Factory")
+        app.polling_service = None
+    
+    # Register cleanup handler for polling service
+    @app.teardown_appcontext
+    def cleanup_polling_service(exception=None):
+        """Clean up polling service when app context ends."""
+        if hasattr(app, 'polling_service') and app.polling_service and app.polling_service.is_running():
+            log_info("Stopping polling service during app context teardown", "Flask App Factory")
+            app.polling_service.stop()
     
     # Register routes on this app instance
     register_routes(app)
@@ -240,6 +269,38 @@ def register_routes(app):
             response, status_code = handle_flask_error(e, "API /api/sensors/history")
             return jsonify(response), status_code
 
+    @app.route('/devices/sensors', methods=['GET'])
+    def get_devices_sensors():
+        """
+        Get sensor device information including battery voltage from SensorPush API.
+        
+        This endpoint fetches device information directly from the SensorPush API,
+        which includes battery voltage data for each sensor.
+        
+        Returns:
+            JSON response with sensor device information including battery voltage.
+        """
+        try:
+            log_info("Retrieving sensor devices with battery voltage from SensorPush API", "API /devices/sensors")
+            
+            # Initialize SensorPush API client
+            from flask import current_app
+            api_client = SensorPushAPI()
+            
+            # Get devices/sensors data from SensorPush API
+            devices_data = api_client.get_devices_sensors()
+            
+            log_info(f"Successfully retrieved device data for {len(devices_data)} sensors", "API /devices/sensors")
+            return jsonify({
+                'success': True,
+                'data': devices_data,
+                'count': len(devices_data)
+            })
+            
+        except Exception as e:
+            response, status_code = handle_flask_error(e, "API /devices/sensors")
+            return jsonify(response), status_code
+
     @app.route('/api/historical_data', methods=['GET'])
     def get_historical_data():
         """
@@ -334,7 +395,8 @@ def register_routes(app):
                     readings = session.query(
                         func.strftime('%Y-%m-%d %H:00:00', SensorReading.timestamp).label('hour'),
                         func.avg(SensorReading.temperature).label('avg_temperature'),
-                        func.avg(SensorReading.humidity).label('avg_humidity')
+                        func.avg(SensorReading.humidity).label('avg_humidity'),
+                        func.avg(SensorReading.battery_voltage).label('battery_voltage')
                     ).filter(and_(
                         SensorReading.sensor_id == sensor_id,
                         SensorReading.timestamp >= start_time,
@@ -353,7 +415,8 @@ def register_routes(app):
                         historical_data.append({
                             'timestamp': hour_datetime.isoformat(),
                             'temperature': round(float(reading.avg_temperature), 2),
-                            'humidity': round(float(reading.avg_humidity), 2)
+                            'humidity': round(float(reading.avg_humidity), 2),
+                            'battery_voltage': round(float(reading.battery_voltage), 2) if reading.battery_voltage is not None else None
                         })
                 else:
                     # Get raw historical readings within the time range
@@ -372,7 +435,8 @@ def register_routes(app):
                         historical_data.append({
                             'timestamp': reading.timestamp.isoformat(),
                             'temperature': reading.temperature,
-                            'humidity': reading.humidity
+                            'humidity': reading.humidity,
+                            'battery_voltage': reading.battery_voltage
                         })
                 
                 log_info(f"Successfully retrieved {len(historical_data)} historical readings for sensor {sensor_id}", "API /api/historical_data")
@@ -494,7 +558,8 @@ def register_routes(app):
                         readings = session.query(
                             func.strftime('%Y-%m-%d %H:00:00', SensorReading.timestamp).label('hour'),
                             func.avg(SensorReading.temperature).label('avg_temperature'),
-                            func.avg(SensorReading.humidity).label('avg_humidity')
+                            func.avg(SensorReading.humidity).label('avg_humidity'),
+                            func.avg(SensorReading.battery_voltage).label('battery_voltage')
                         ).filter(and_(
                             SensorReading.sensor_id == sensor_id,
                             SensorReading.timestamp >= start_time,
@@ -512,7 +577,8 @@ def register_routes(app):
                             historical_data.append({
                                 'timestamp': hour_datetime.isoformat(),
                                 'temperature': round(float(reading.avg_temperature), 2),
-                                'humidity': round(float(reading.avg_humidity), 2)
+                                'humidity': round(float(reading.avg_humidity), 2),
+                                'battery_voltage': round(float(reading.battery_voltage), 2) if reading.battery_voltage is not None else None
                             })
                     else:
                         # Get raw historical readings within the time range
@@ -531,7 +597,8 @@ def register_routes(app):
                             historical_data.append({
                                 'timestamp': reading.timestamp.isoformat(),
                                 'temperature': reading.temperature,
-                                'humidity': reading.humidity
+                                'humidity': reading.humidity,
+                                'battery_voltage': reading.battery_voltage
                             })
                     
                     # Add sensor data to result
@@ -1000,7 +1067,8 @@ def serialize_sensor_reading(reading):
         'sensor_id': reading.sensor_id,
         'timestamp': reading.timestamp.isoformat(),
         'temperature': reading.temperature,
-        'humidity': reading.humidity
+        'humidity': reading.humidity,
+        'battery_voltage': reading.battery_voltage
     }
 
 
@@ -1043,20 +1111,10 @@ if __name__ == '__main__':
     # Get configuration first
     config = get_config()
     
-    # Create the Flask application
-    app = create_app()
-    
-    # Initialize and start the polling service
-    polling_service_instance = create_polling_service(config_class=config)
-    polling_service_instance.start()
+    # Create the Flask application (polling service will be initialized automatically)
+    app = create_app(config_class=config)
 
-    # Register a teardown function to stop the polling service when the app context ends
-    @app.teardown_appcontext
-    def stop_polling_service(exception=None):
-        if polling_service_instance.is_running():
-            polling_service_instance.stop()
-
-    log_info("Starting Flask application", "Flask startup")
+    log_info("Starting Flask application with integrated polling service", "Flask startup")
 
     app.run(
         debug=config.DEBUG,

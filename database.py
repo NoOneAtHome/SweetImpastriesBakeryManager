@@ -7,7 +7,7 @@ It provides functions to initialize the SQLite database and get SQLAlchemy sessi
 
 import os
 from contextlib import contextmanager
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
 from config import get_config
@@ -32,7 +32,8 @@ def init_database():
     Initialize the SQLite database.
     
     Creates the database file and all defined tables if they do not already exist,
-    using the Base from models.py.
+    using the Base from models.py. Also runs database migrations to ensure
+    schema is up to date.
     
     Returns:
         bool: True if initialization was successful, False otherwise
@@ -54,6 +55,12 @@ def init_database():
                 return False
         else:
             print("Database tables initialized successfully")
+        
+        # Run database migrations to ensure schema is up to date
+        migration_success = migrate_database()
+        if not migration_success:
+            print("Warning: Database migrations failed")
+            return False
             
         return True
         
@@ -63,6 +70,69 @@ def init_database():
     except Exception as e:
         print(f"Unexpected error during database initialization: {e}")
         raise
+
+
+def migrate_database():
+    """
+    Perform database migrations to ensure schema is up to date.
+    
+    This function checks for missing columns and adds them if needed.
+    Currently handles:
+    - Adding battery_voltage column to sensor_readings table if missing
+    - Adding level column to errors table if missing
+    
+    Returns:
+        bool: True if migrations completed successfully, False otherwise
+    """
+    try:
+        with get_db_session_context() as session:
+            migrations_performed = []
+            
+            # Check if battery_voltage column exists in sensor_readings table
+            try:
+                session.execute(text("SELECT battery_voltage FROM sensor_readings LIMIT 1"))
+                print("Database schema check: battery_voltage column exists")
+            except Exception:
+                # Column doesn't exist, need to add it
+                print("Adding missing battery_voltage column to sensor_readings table...")
+                session.execute(text("ALTER TABLE sensor_readings ADD COLUMN battery_voltage FLOAT"))
+                migrations_performed.append("Added battery_voltage column to sensor_readings")
+            
+            # Check if level column exists in errors table
+            try:
+                session.execute(text("SELECT level FROM errors LIMIT 1"))
+                print("Database schema check: level column exists in errors table")
+            except Exception:
+                # Column doesn't exist, need to add it
+                print("Adding missing level column to errors table...")
+                session.execute(text("ALTER TABLE errors ADD COLUMN level STRING DEFAULT 'ERROR'"))
+                migrations_performed.append("Added level column to errors")
+            
+            # Check if source column exists in errors table
+            try:
+                session.execute(text("SELECT source FROM errors LIMIT 1"))
+                print("Database schema check: source column exists in errors table")
+            except Exception:
+                # Column doesn't exist, need to add it
+                print("Adding missing source column to errors table...")
+                session.execute(text("ALTER TABLE errors ADD COLUMN source STRING DEFAULT 'application'"))
+                migrations_performed.append("Added source column to errors")
+            
+            # Commit all migrations
+            if migrations_performed:
+                session.commit()
+                print(f"Successfully completed migrations: {', '.join(migrations_performed)}")
+            else:
+                print("Database schema is up to date - no migrations needed")
+            
+            return True
+                
+    except SQLAlchemyError as e:
+        print(f"Error during database migration: {e}")
+        return False
+    except Exception as e:
+        print(f"Unexpected error during database migration: {e}")
+        return False
 
 
 def get_db_session() -> Session:

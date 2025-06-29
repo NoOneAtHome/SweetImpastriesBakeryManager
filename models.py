@@ -49,12 +49,20 @@ class SensorReading(Base):
     timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
     temperature = Column(Float, nullable=False)
     humidity = Column(Float, nullable=False)
+    battery_voltage = Column(Float, nullable=True)
     
     # Relationship to sensor
     sensor = relationship("Sensor", back_populates="readings")
     
+    def __init__(self, sensor_id, timestamp, temperature, humidity, battery_voltage=None):
+        self.sensor_id = sensor_id
+        self.timestamp = timestamp
+        self.temperature = temperature
+        self.humidity = humidity
+        self.battery_voltage = battery_voltage
+    
     def __repr__(self):
-        return f"<SensorReading(id={self.id}, sensor_id='{self.sensor_id}', timestamp='{self.timestamp}', temp={self.temperature}, humidity={self.humidity})>"
+        return f"<SensorReading(id={self.id}, sensor_id='{self.sensor_id}', timestamp='{self.timestamp}', temp={self.temperature}, humidity={self.humidity}, battery_voltage={self.battery_voltage})>"
 
 
 class Error(Base):

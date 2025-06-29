@@ -242,6 +242,24 @@ class PollingService:
                     sensor_names = self._get_sensor_names()
                     log_debug(f"Fetched sensor names for {len(new_sensor_ids)} new sensors", "PollingService._process_samples_data")
                 
+                # Fetch battery voltage data from /devices/sensors endpoint
+                battery_voltages = {}
+                try:
+                    log_debug("Fetching battery voltage data from /devices/sensors endpoint", "PollingService._process_samples_data")
+                    devices_data = self.api_client.get_devices_sensors()
+                    
+                    # Extract battery voltage for each sensor
+                    for sensor_id, sensor_info in devices_data.items():
+                        if isinstance(sensor_info, dict) and 'battery_voltage' in sensor_info:
+                            battery_voltages[sensor_id] = sensor_info['battery_voltage']
+                            log_debug(f"Found battery voltage for sensor {sensor_id}: {sensor_info['battery_voltage']}V", "PollingService._process_samples_data")
+                    
+                    log_info(f"Retrieved battery voltage data for {len(battery_voltages)} sensors", "PollingService._process_samples_data")
+                    
+                except Exception as e:
+                    log_warning(f"Failed to fetch battery voltage data: {e}. Proceeding without battery voltage.", "PollingService._process_samples_data")
+                    # Continue processing without battery voltage data
+                
                 for sensor_id, readings in sensors_data.items():
                     if not isinstance(readings, list):
                         log_warning(f"Invalid readings format for sensor {sensor_id}", "PollingService._process_samples_data")
@@ -271,6 +289,7 @@ class PollingService:
                             timestamp_str = reading.get('observed')
                             temperature = reading.get('temperature')
                             humidity = reading.get('humidity')
+                            # Note: battery_voltage is not available in samples data, get from devices/sensors
                             
                             if not all([timestamp_str, temperature is not None, humidity is not None]):
                                 log_warning(f"Incomplete reading data for sensor {sensor_id}: {reading}", "PollingService._process_samples_data")
@@ -291,12 +310,16 @@ class PollingService:
                                 duplicate_readings_count += 1
                                 continue
                             
-                            # Create new sensor reading
+                            # Get battery voltage from devices/sensors data
+                            battery_voltage = battery_voltages.get(sensor_id)
+                            
+                            # Create new sensor reading with battery voltage from devices/sensors endpoint
                             new_reading = SensorReading(
                                 sensor_id=sensor_id,
                                 timestamp=timestamp,
                                 temperature=float(temperature),
-                                humidity=float(humidity)
+                                humidity=float(humidity),
+                                battery_voltage=float(battery_voltage) if battery_voltage is not None else None
                             )
                             
                             session.add(new_reading)
