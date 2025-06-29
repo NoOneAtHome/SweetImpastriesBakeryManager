@@ -152,6 +152,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+*.tar
 # pytype static type analyzer
 .pytype/
 
@@ -177,3 +178,4 @@ pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python
 /db/sensor_dashboard.db
+bakery-sensors-app.tar

@@ -37,7 +37,7 @@
     {% if sensors_data %}
         <div class="sensor-grid">
             {% for sensor_data in sensors_data %}
-                <div class="sensor-card">
+                <div class="sensor-card{% if sensor_data.is_stale %} stale-sensor{% endif %}">
                     <div class="sensor-name">
                         <span class="status-indicator {% if sensor_data.sensor.active %}status-active{% else %}status-inactive{% endif %}"></span>
                         {{ sensor_data.sensor.name }}
@@ -87,6 +87,9 @@
                         
                         <div class="timestamp">
                             Last updated: {{ sensor_data.latest_reading.timestamp|localtime }}
+                            {% if sensor_data.is_stale %}
+                                <span class="stale-indicator">⏰ Stale!</span>
+                            {% endif %}
                         </div>
                     {% else %}
                         <div class="no-data">No recent readings available</div>

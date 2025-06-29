@@ -561,6 +561,8 @@ def register_routes(app):
                 active_sensors = session.query(Sensor).filter(Sensor.active == True).all()
                 
                 sensors_with_readings = []
+                current_utc_time = datetime.now(UTC)
+                
                 for sensor in active_sensors:
                     # Get the latest reading for this sensor
                     latest_reading = session.query(SensorReading)\
@@ -571,10 +573,23 @@ def register_routes(app):
                     # Check for threshold breaches
                     threshold_info = check_threshold_breach(sensor, latest_reading)
                     
+                    # Calculate if sensor is stale (more than 4 hours old)
+                    is_stale = False
+                    if latest_reading and latest_reading.timestamp:
+                        # Ensure the timestamp is timezone-aware (UTC)
+                        reading_timestamp = latest_reading.timestamp
+                        if reading_timestamp.tzinfo is None:
+                            reading_timestamp = reading_timestamp.replace(tzinfo=UTC)
+                        
+                        # Calculate time difference
+                        time_difference = current_utc_time - reading_timestamp
+                        is_stale = time_difference > timedelta(hours=4)
+                    
                     sensor_data = {
                         'sensor': sensor,
                         'latest_reading': latest_reading,
-                        'threshold_info': threshold_info
+                        'threshold_info': threshold_info,
+                        'is_stale': is_stale
                     }
                     sensors_with_readings.append(sensor_data)
                 
