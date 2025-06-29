@@ -16,8 +16,11 @@ RUN mkdir -p /app/db && chmod 777 /app/db
 # Copy all application files
 COPY . .
 
+# Copy the Gunicorn configuration file
+COPY gunicorn_config.py /app/gunicorn_config.py
+
 # Expose port 8000
 EXPOSE 8000
 
-# Define command to run the Flask application using gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]
+# Command to run the application with Gunicorn and the new config file
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "-c", "gunicorn_config.py", "app:app"]

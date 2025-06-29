@@ -547,6 +547,403 @@ def register_routes(app):
             response, status_code = handle_flask_error(e, "API /api/multi_sensor_historical_data")
             return jsonify(response), status_code
 
+    # Web Interface Routes
+    @app.route('/')
+    def index():
+        """
+        Main dashboard page showing all sensors and their latest readings.
+        """
+        try:
+            log_info("Loading main dashboard", "Web Interface")
+            
+            with get_db_session_context() as session:
+                # Get all active sensors with their latest readings
+                active_sensors = session.query(Sensor).filter(Sensor.active == True).all()
+                
+                sensors_with_readings = []
+                for sensor in active_sensors:
+                    # Get the latest reading for this sensor
+                    latest_reading = session.query(SensorReading)\
+                        .filter(SensorReading.sensor_id == sensor.sensor_id)\
+                        .order_by(desc(SensorReading.timestamp))\
+                        .first()
+                    
+                    # Check for threshold breaches
+                    threshold_info = check_threshold_breach(sensor, latest_reading)
+                    
+                    sensor_data = {
+                        'sensor': sensor,
+                        'latest_reading': latest_reading,
+                        'threshold_info': threshold_info
+                    }
+                    sensors_with_readings.append(sensor_data)
+                
+                log_info(f"Dashboard loaded with {len(sensors_with_readings)} active sensors", "Web Interface")
+                return render_template('dashboard.html', sensors_data=sensors_with_readings)
+                
+        except Exception as e:
+            log_warning(f"Error loading dashboard: {str(e)}", "Web Interface")
+            return render_template('error.html', error="Failed to load dashboard"), 500
+
+    @app.route('/sensor/<sensor_id>')
+    def sensor_detail(sensor_id):
+        """
+        Detailed view for a specific sensor showing recent history.
+        """
+        try:
+            log_info(f"Loading sensor detail for {sensor_id}", "Web Interface")
+            
+            with get_db_session_context() as session:
+                # Get sensor information
+                sensor = session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+                if not sensor:
+                    log_warning(f"Sensor not found: {sensor_id}", "Web Interface")
+                    return render_template('error.html', error=f"Sensor {sensor_id} not found"), 404
+                
+                # Get recent readings (last 24 hours)
+                start_time = datetime.now(UTC) - timedelta(hours=24)
+                readings = session.query(SensorReading)\
+                    .filter(and_(
+                        SensorReading.sensor_id == sensor_id,
+                        SensorReading.timestamp >= start_time
+                    ))\
+                    .order_by(desc(SensorReading.timestamp))\
+                    .limit(100)\
+                    .all()
+                
+                log_info(f"Sensor detail loaded for {sensor_id} with {len(readings)} readings", "Web Interface")
+                return render_template('sensor_detail.html', sensor=sensor, readings=readings)
+                
+        except Exception as e:
+            log_warning(f"Error loading sensor detail for {sensor_id}: {str(e)}", "Web Interface")
+            return render_template('error.html', error="Failed to load sensor details"), 500
+
+    # Manager Authentication Routes
+    @app.route('/manager/login', methods=['GET', 'POST'])
+    def manager_login():
+        """
+        Manager login page and authentication handler.
+        """
+        if request.method == 'GET':
+            # Check if already logged in
+            session_id = session.get('manager_session_id')
+            if session_id and auth_manager.validate_session(session_id, request.remote_addr):
+                return redirect(url_for('manager_settings'))
+            
+            return render_template('manager_login.html')
+        
+        # POST request - handle login
+        try:
+            pin = request.form.get('pin', '').strip()
+            ip_address = request.remote_addr
+            
+            if not pin:
+                return render_template('manager_login.html', error="PIN is required")
+            
+            # Attempt authentication
+            success, result = auth_manager.authenticate(pin, ip_address)
+            
+            if success:
+                # Store session ID
+                session['manager_session_id'] = result
+                session.permanent = True
+                log_info(f"Manager login successful from {ip_address}", "Manager Login")
+                return redirect(url_for('manager_settings'))
+            else:
+                # Authentication failed
+                log_warning(f"Manager login failed from {ip_address}: {result}", "Manager Login")
+                return render_template('manager_login.html', error=result)
+                
+        except AccountLockoutError as e:
+            log_warning(f"Account lockout triggered from {request.remote_addr}", "Manager Login")
+            return render_template('manager_login.html',
+                                 error="Account is locked due to too many failed attempts. Please try again later.")
+        except Exception as e:
+            log_warning(f"Error during manager login: {str(e)}", "Manager Login")
+            return render_template('manager_login.html', error="Login error occurred")
+
+    @app.route('/manager/logout')
+    def manager_logout():
+        """
+        Manager logout handler.
+        """
+        session_id = session.get('manager_session_id')
+        if session_id:
+            auth_manager.logout(session_id)
+            session.pop('manager_session_id', None)
+            log_info("Manager logged out", "Manager Logout")
+        
+        return redirect(url_for('index'))
+
+    @app.route('/manager/settings')
+    @require_manager_auth
+    def manager_settings():
+        """
+        Manager settings panel.
+        """
+        try:
+            config = get_config()
+            
+            # Get system statistics
+            with get_db_session_context() as db_session:
+                sensor_count = db_session.query(Sensor).filter(Sensor.active == True).count()
+                reading_count = db_session.query(SensorReading).count()
+            
+            # Get current polling interval
+            current_polling_interval = SettingsManager.get_polling_interval()
+            
+            return render_template('manager_settings.html',
+                                 session_timeout=config.SESSION_TIMEOUT,
+                                 max_attempts=config.MAX_LOGIN_ATTEMPTS,
+                                 flask_env=config.FLASK_ENV,
+                                 sensor_count=sensor_count,
+                                 reading_count=reading_count,
+                                 current_polling_interval=current_polling_interval,
+                                 success=request.args.get('success'),
+                                 error=request.args.get('error'))
+                                 
+        except Exception as e:
+            log_warning(f"Error loading manager settings: {str(e)}", "Manager Settings")
+            return render_template('error.html', error="Failed to load settings"), 500
+
+    @app.route('/manager/change-pin', methods=['POST'])
+    @require_manager_auth
+    def manager_change_pin():
+        """
+        Handle manager PIN change requests.
+        """
+        try:
+            current_pin = request.form.get('current_pin', '').strip()
+            new_pin = request.form.get('new_pin', '').strip()
+            confirm_pin = request.form.get('confirm_pin', '').strip()
+            
+            # Validate input
+            if not all([current_pin, new_pin, confirm_pin]):
+                return redirect(url_for('manager_settings', error="All fields are required"))
+            
+            if new_pin != confirm_pin:
+                return redirect(url_for('manager_settings', error="New PIN and confirmation do not match"))
+            
+            if len(new_pin) < 6 or not new_pin.isdigit():
+                return redirect(url_for('manager_settings', error="New PIN must be at least 6 digits and contain only numbers"))
+            
+            # Attempt PIN change
+            session_id = session.get('manager_session_id')
+            success, message = auth_manager.change_pin(current_pin, new_pin, session_id, request.remote_addr)
+            
+            if success:
+                return redirect(url_for('manager_settings', success=message))
+            else:
+                return redirect(url_for('manager_settings', error=message))
+                
+        except Exception as e:
+            log_warning(f"Error changing manager PIN: {str(e)}", "Manager Change PIN")
+            return redirect(url_for('manager_settings', error="Error changing PIN"))
+
+    @app.route('/manager/settings/sensors', methods=['GET', 'POST'])
+    @require_manager_auth
+    def manager_sensor_settings():
+        """
+        Handle sensor configuration settings.
+        """
+        try:
+            if request.method == 'POST':
+                # Handle sensor updates
+                sensor_id = request.form.get('sensor_id')
+                action = request.form.get('action')
+                
+                if not sensor_id:
+                    return redirect(url_for('manager_sensor_settings', error="Sensor ID is required"))
+                
+                with get_db_session_context() as db_session:
+                    sensor = db_session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+                    if not sensor:
+                        return redirect(url_for('manager_sensor_settings', error="Sensor not found"))
+                    
+                    if action == 'rename':
+                        new_name = request.form.get('new_name', '').strip()
+                        if not new_name:
+                            return redirect(url_for('manager_sensor_settings', error="New name is required"))
+                        
+                        sensor.name = new_name
+                        db_session.commit()
+                        log_info(f"Sensor {sensor_id} renamed to '{new_name}'", "Manager Settings")
+                        return redirect(url_for('manager_sensor_settings', success=f"Sensor renamed to '{new_name}'"))
+                    
+                    elif action == 'toggle_active':
+                        sensor.active = not sensor.active
+                        status = "activated" if sensor.active else "deactivated"
+                        db_session.commit()
+                        log_info(f"Sensor {sensor_id} {status}", "Manager Settings")
+                        return redirect(url_for('manager_sensor_settings', success=f"Sensor {status}"))
+                    
+                    elif action == 'update_thresholds':
+                        try:
+                            min_temp = float(request.form.get('min_temp', 0))
+                            max_temp = float(request.form.get('max_temp', 50))
+                            min_humidity = float(request.form.get('min_humidity', 0))
+                            max_humidity = float(request.form.get('max_humidity', 100))
+                            
+                            # Validate thresholds
+                            if min_temp >= max_temp:
+                                return redirect(url_for('manager_sensor_settings', error="Minimum temperature must be less than maximum"))
+                            if min_humidity >= max_humidity:
+                                return redirect(url_for('manager_sensor_settings', error="Minimum humidity must be less than maximum"))
+                            
+                            sensor.min_temp = min_temp
+                            sensor.max_temp = max_temp
+                            sensor.min_humidity = min_humidity
+                            sensor.max_humidity = max_humidity
+                            db_session.commit()
+                            
+                            log_info(f"Thresholds updated for sensor {sensor_id}", "Manager Settings")
+                            return redirect(url_for('manager_sensor_settings', success="Thresholds updated successfully"))
+                            
+                        except ValueError:
+                            return redirect(url_for('manager_sensor_settings', error="Invalid threshold values"))
+            
+            # GET request - show sensor settings page
+            with get_db_session_context() as db_session:
+                sensors = db_session.query(Sensor).all()
+                
+            return render_template('manager_sensor_settings.html',
+                                 sensors=sensors,
+                                 success=request.args.get('success'),
+                                 error=request.args.get('error'))
+                                 
+        except Exception as e:
+            log_warning(f"Error in sensor settings: {str(e)}", "Manager Settings")
+            return render_template('error.html', error="Failed to load sensor settings"), 500
+
+    @app.route('/manager/sensors/refetch_names', methods=['POST'])
+    @require_manager_auth
+    def refetch_sensor_names():
+        """
+        Refetch sensor names from the SensorPush API and update them in the local database.
+        """
+        try:
+            log_info("Starting sensor name refetch operation", "Refetch Sensor Names")
+            
+            # Get configuration for SensorPush API
+            config = get_config()
+            
+            # Initialize SensorPush API client
+            api_client = SensorPushAPI(config_class=config)
+            
+            # Authenticate with SensorPush API first
+            log_info("Attempting to authenticate with SensorPush API", "Refetch Sensor Names")
+            if not api_client.authenticate():
+                raise Exception("Failed to authenticate with SensorPush API")
+            log_info("Successfully authenticated with SensorPush API", "Refetch Sensor Names")
+            
+            # Fetch latest sensor metadata from SensorPush API
+            log_info("Calling get_devices_sensors() to fetch sensor metadata", "Refetch Sensor Names")
+            sensors_data = api_client.get_devices_sensors()
+            log_info(f"Successfully retrieved sensor data: {len(sensors_data)} sensors", "Refetch Sensor Names")
+            
+            updated_count = 0
+            
+            # Process sensor data and update local database
+            with get_db_session_context() as db_session:
+                for sensor_id, sensor_info in sensors_data.items():
+                    # Extract sensor name from API response
+                    api_sensor_name = sensor_info.get('name', f'Sensor {sensor_id}')
+                    
+                    # Find corresponding sensor in local database
+                    local_sensor = db_session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+                    
+                    if local_sensor:
+                        # Check if name differs and update if necessary
+                        if local_sensor.name != api_sensor_name:
+                            old_name = local_sensor.name
+                            local_sensor.name = api_sensor_name
+                            updated_count += 1
+                            log_info(f"Updated sensor {sensor_id} name from '{old_name}' to '{api_sensor_name}'", "Refetch Sensor Names")
+                    else:
+                        log_info(f"Sensor {sensor_id} found in API but not in local database", "Refetch Sensor Names")
+                
+                # Commit all changes to database
+                db_session.commit()
+            
+            # Prepare success message
+            if updated_count > 0:
+                success_message = f"Successfully updated {updated_count} sensor name(s) from SensorPush API"
+            else:
+                success_message = "All sensor names are already up to date"
+            
+            log_info(f"Sensor name refetch completed. Updated {updated_count} sensors", "Refetch Sensor Names")
+            flash(success_message, 'success')
+            return redirect(url_for('manager_sensor_settings', success=success_message))
+            
+        except Exception as e:
+            error_message = f"Failed to refetch sensor names: {str(e)}"
+            log_warning(error_message, "Refetch Sensor Names")
+            flash(error_message, 'error')
+            return redirect(url_for('manager_sensor_settings', error=error_message))
+
+    @app.route('/manager/settings/polling', methods=['POST'])
+    @require_manager_auth
+    def manager_polling_settings():
+        """
+        Handle polling interval configuration.
+        """
+        try:
+            interval_str = request.form.get('polling_interval', '').strip()
+            
+            if not interval_str:
+                return redirect(url_for('manager_settings', error="Polling interval is required"))
+            
+            try:
+                interval = int(interval_str)
+                if interval < 1:
+                    return redirect(url_for('manager_settings', error="Polling interval must be at least 1 minute"))
+            except ValueError:
+                return redirect(url_for('manager_settings', error="Invalid polling interval"))
+            
+            # Update the polling interval setting in database
+            if SettingsManager.set_polling_interval(interval):
+                # Update the polling service with the new interval
+                from flask import current_app
+                if hasattr(current_app, 'polling_service'):
+                    current_app.polling_service.update_polling_interval(interval)
+                    log_info(f"Polling interval updated to {interval} minutes and applied to service", "Manager Settings")
+                else:
+                    log_info(f"Polling interval updated to {interval} minutes in database", "Manager Settings")
+                
+                return redirect(url_for('manager_settings', success=f"Polling interval updated to {interval} minutes"))
+            else:
+                return redirect(url_for('manager_settings', error="Failed to update polling interval"))
+                
+        except Exception as e:
+            log_warning(f"Error updating polling interval: {str(e)}", "Manager Settings")
+            return redirect(url_for('manager_settings', error="Error updating polling interval"))
+
+    # Error handlers
+    @app.errorhandler(404)
+    def not_found(error):
+        """Handle 404 errors."""
+        log_warning(f"404 error: {request.url}", "Flask error handler")
+        return jsonify({
+            'success': False,
+            'error': 'Endpoint not found'
+        }), 404
+
+    @app.errorhandler(405)
+    def method_not_allowed(error):
+        """Handle 405 errors."""
+        log_warning(f"405 error: {request.method} {request.url}", "Flask error handler")
+        return jsonify({
+            'success': False,
+            'error': 'Method not allowed'
+        }), 405
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        """Handle 500 errors."""
+        error_handler = get_error_handler()
+        error_id = error_handler.log_and_store_error(error.original_exception if hasattr(error, 'original_exception') else Exception(str(error)), "Flask 500 error handler")
+        return jsonify(error_handler.get_user_friendly_error(error_id)), 500
+
 
 # Create Flask application instance
 app = create_app()
@@ -622,422 +1019,6 @@ def get_time_filter(time_slice):
         raise ValueError(f"Invalid time_slice. Must be one of: {', '.join(time_slice_map.keys())}")
     
     return time_slice_map[time_slice]
-
-
-# Web Interface Routes
-
-@app.route('/')
-def index():
-    """
-    Main dashboard page showing all sensors and their latest readings.
-    """
-    try:
-        log_info("Loading main dashboard", "Web Interface")
-        
-        with get_db_session_context() as session:
-            # Get all active sensors with their latest readings
-            active_sensors = session.query(Sensor).filter(Sensor.active == True).all()
-            
-            sensors_with_readings = []
-            for sensor in active_sensors:
-                # Get the latest reading for this sensor
-                latest_reading = session.query(SensorReading)\
-                    .filter(SensorReading.sensor_id == sensor.sensor_id)\
-                    .order_by(desc(SensorReading.timestamp))\
-                    .first()
-                
-                # Check for threshold breaches
-                threshold_info = check_threshold_breach(sensor, latest_reading)
-                
-                sensor_data = {
-                    'sensor': sensor,
-                    'latest_reading': latest_reading,
-                    'threshold_info': threshold_info
-                }
-                sensors_with_readings.append(sensor_data)
-            
-            log_info(f"Dashboard loaded with {len(sensors_with_readings)} active sensors", "Web Interface")
-            return render_template('dashboard.html', sensors_data=sensors_with_readings)
-            
-    except Exception as e:
-        log_warning(f"Error loading dashboard: {str(e)}", "Web Interface")
-        return render_template('error.html', error="Failed to load dashboard"), 500
-
-
-@app.route('/sensor/<sensor_id>')
-def sensor_detail(sensor_id):
-    """
-    Detailed view for a specific sensor showing recent history.
-    """
-    try:
-        log_info(f"Loading sensor detail for {sensor_id}", "Web Interface")
-        
-        with get_db_session_context() as session:
-            # Get sensor information
-            sensor = session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
-            if not sensor:
-                log_warning(f"Sensor not found: {sensor_id}", "Web Interface")
-                return render_template('error.html', error=f"Sensor {sensor_id} not found"), 404
-            
-            # Get recent readings (last 24 hours)
-            start_time = datetime.now(UTC) - timedelta(hours=24)
-            readings = session.query(SensorReading)\
-                .filter(and_(
-                    SensorReading.sensor_id == sensor_id,
-                    SensorReading.timestamp >= start_time
-                ))\
-                .order_by(desc(SensorReading.timestamp))\
-                .limit(100)\
-                .all()
-            
-            log_info(f"Sensor detail loaded for {sensor_id} with {len(readings)} readings", "Web Interface")
-            return render_template('sensor_detail.html', sensor=sensor, readings=readings)
-            
-    except Exception as e:
-        log_warning(f"Error loading sensor detail for {sensor_id}: {str(e)}", "Web Interface")
-        return render_template('error.html', error="Failed to load sensor details"), 500
-
-
-# Manager Authentication Routes
-
-@app.route('/manager/login', methods=['GET', 'POST'])
-def manager_login():
-    """
-    Manager login page and authentication handler.
-    """
-    if request.method == 'GET':
-        # Check if already logged in
-        session_id = session.get('manager_session_id')
-        if session_id and auth_manager.validate_session(session_id, request.remote_addr):
-            return redirect(url_for('manager_settings'))
-        
-        return render_template('manager_login.html')
-    
-    # POST request - handle login
-    try:
-        pin = request.form.get('pin', '').strip()
-        ip_address = request.remote_addr
-        
-        if not pin:
-            return render_template('manager_login.html', error="PIN is required")
-        
-        # Attempt authentication
-        success, result = auth_manager.authenticate(pin, ip_address)
-        
-        if success:
-            # Store session ID
-            session['manager_session_id'] = result
-            session.permanent = True
-            log_info(f"Manager login successful from {ip_address}", "Manager Login")
-            return redirect(url_for('manager_settings'))
-        else:
-            # Authentication failed
-            log_warning(f"Manager login failed from {ip_address}: {result}", "Manager Login")
-            return render_template('manager_login.html', error=result)
-            
-    except AccountLockoutError as e:
-        log_warning(f"Account lockout triggered from {request.remote_addr}", "Manager Login")
-        return render_template('manager_login.html',
-                             error="Account is locked due to too many failed attempts. Please try again later.")
-    except Exception as e:
-        log_warning(f"Error during manager login: {str(e)}", "Manager Login")
-        return render_template('manager_login.html', error="Login error occurred")
-
-
-@app.route('/manager/logout')
-def manager_logout():
-    """
-    Manager logout handler.
-    """
-    session_id = session.get('manager_session_id')
-    if session_id:
-        auth_manager.logout(session_id)
-        session.pop('manager_session_id', None)
-        log_info("Manager logged out", "Manager Logout")
-    
-    return redirect(url_for('index'))
-
-
-@app.route('/manager/settings')
-@require_manager_auth
-def manager_settings():
-    """
-    Manager settings panel.
-    """
-    try:
-        config = get_config()
-        
-        # Get system statistics
-        with get_db_session_context() as db_session:
-            sensor_count = db_session.query(Sensor).filter(Sensor.active == True).count()
-            reading_count = db_session.query(SensorReading).count()
-        
-        # Get current polling interval
-        current_polling_interval = SettingsManager.get_polling_interval()
-        
-        return render_template('manager_settings.html',
-                             session_timeout=config.SESSION_TIMEOUT,
-                             max_attempts=config.MAX_LOGIN_ATTEMPTS,
-                             flask_env=config.FLASK_ENV,
-                             sensor_count=sensor_count,
-                             reading_count=reading_count,
-                             current_polling_interval=current_polling_interval,
-                             success=request.args.get('success'),
-                             error=request.args.get('error'))
-                             
-    except Exception as e:
-        log_warning(f"Error loading manager settings: {str(e)}", "Manager Settings")
-        return render_template('error.html', error="Failed to load settings"), 500
-
-
-@app.route('/manager/change-pin', methods=['POST'])
-@require_manager_auth
-def manager_change_pin():
-    """
-    Handle manager PIN change requests.
-    """
-    try:
-        current_pin = request.form.get('current_pin', '').strip()
-        new_pin = request.form.get('new_pin', '').strip()
-        confirm_pin = request.form.get('confirm_pin', '').strip()
-        
-        # Validate input
-        if not all([current_pin, new_pin, confirm_pin]):
-            return redirect(url_for('manager_settings', error="All fields are required"))
-        
-        if new_pin != confirm_pin:
-            return redirect(url_for('manager_settings', error="New PIN and confirmation do not match"))
-        
-        if len(new_pin) < 6 or not new_pin.isdigit():
-            return redirect(url_for('manager_settings', error="New PIN must be at least 6 digits and contain only numbers"))
-        
-        # Attempt PIN change
-        session_id = session.get('manager_session_id')
-        success, message = auth_manager.change_pin(current_pin, new_pin, session_id, request.remote_addr)
-        
-        if success:
-            return redirect(url_for('manager_settings', success=message))
-        else:
-            return redirect(url_for('manager_settings', error=message))
-            
-    except Exception as e:
-        log_warning(f"Error changing manager PIN: {str(e)}", "Manager Change PIN")
-        return redirect(url_for('manager_settings', error="Error changing PIN"))
-
-
-@app.route('/manager/settings/sensors', methods=['GET', 'POST'])
-@require_manager_auth
-def manager_sensor_settings():
-    """
-    Handle sensor configuration settings.
-    """
-    try:
-        if request.method == 'POST':
-            # Handle sensor updates
-            sensor_id = request.form.get('sensor_id')
-            action = request.form.get('action')
-            
-            if not sensor_id:
-                return redirect(url_for('manager_sensor_settings', error="Sensor ID is required"))
-            
-            with get_db_session_context() as db_session:
-                sensor = db_session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
-                if not sensor:
-                    return redirect(url_for('manager_sensor_settings', error="Sensor not found"))
-                
-                if action == 'rename':
-                    new_name = request.form.get('new_name', '').strip()
-                    if not new_name:
-                        return redirect(url_for('manager_sensor_settings', error="New name is required"))
-                    
-                    sensor.name = new_name
-                    db_session.commit()
-                    log_info(f"Sensor {sensor_id} renamed to '{new_name}'", "Manager Settings")
-                    return redirect(url_for('manager_sensor_settings', success=f"Sensor renamed to '{new_name}'"))
-                
-                elif action == 'toggle_active':
-                    sensor.active = not sensor.active
-                    status = "activated" if sensor.active else "deactivated"
-                    db_session.commit()
-                    log_info(f"Sensor {sensor_id} {status}", "Manager Settings")
-                    return redirect(url_for('manager_sensor_settings', success=f"Sensor {status}"))
-                
-                elif action == 'update_thresholds':
-                    try:
-                        min_temp = float(request.form.get('min_temp', 0))
-                        max_temp = float(request.form.get('max_temp', 50))
-                        min_humidity = float(request.form.get('min_humidity', 0))
-                        max_humidity = float(request.form.get('max_humidity', 100))
-                        
-                        # Validate thresholds
-                        if min_temp >= max_temp:
-                            return redirect(url_for('manager_sensor_settings', error="Minimum temperature must be less than maximum"))
-                        if min_humidity >= max_humidity:
-                            return redirect(url_for('manager_sensor_settings', error="Minimum humidity must be less than maximum"))
-                        
-                        sensor.min_temp = min_temp
-                        sensor.max_temp = max_temp
-                        sensor.min_humidity = min_humidity
-                        sensor.max_humidity = max_humidity
-                        db_session.commit()
-                        
-                        log_info(f"Thresholds updated for sensor {sensor_id}", "Manager Settings")
-                        return redirect(url_for('manager_sensor_settings', success="Thresholds updated successfully"))
-                        
-                    except ValueError:
-                        return redirect(url_for('manager_sensor_settings', error="Invalid threshold values"))
-        
-        # GET request - show sensor settings page
-        with get_db_session_context() as db_session:
-            sensors = db_session.query(Sensor).all()
-            
-        return render_template('manager_sensor_settings.html',
-                             sensors=sensors,
-                             success=request.args.get('success'),
-                             error=request.args.get('error'))
-                             
-    except Exception as e:
-        log_warning(f"Error in sensor settings: {str(e)}", "Manager Settings")
-        return render_template('error.html', error="Failed to load sensor settings"), 500
-
-
-@app.route('/manager/sensors/refetch_names', methods=['POST'])
-@require_manager_auth
-def refetch_sensor_names():
-    """
-    Refetch sensor names from the SensorPush API and update them in the local database.
-    
-    This route fetches the latest sensor metadata from the SensorPush API,
-    compares the names with those stored locally, and updates any differences.
-    
-    Returns:
-        Redirect to manager_sensor_settings with success/error message
-    """
-    try:
-        log_info("Starting sensor name refetch operation", "Refetch Sensor Names")
-        
-        # Get configuration for SensorPush API
-        config = get_config()
-        
-        # Initialize SensorPush API client
-        api_client = SensorPushAPI(config_class=config)
-        
-        # Authenticate with SensorPush API first
-        log_info("Attempting to authenticate with SensorPush API", "Refetch Sensor Names")
-        if not api_client.authenticate():
-            raise Exception("Failed to authenticate with SensorPush API")
-        log_info("Successfully authenticated with SensorPush API", "Refetch Sensor Names")
-        
-        # Fetch latest sensor metadata from SensorPush API
-        log_info("Calling get_devices_sensors() to fetch sensor metadata", "Refetch Sensor Names")
-        sensors_data = api_client.get_devices_sensors()
-        log_info(f"Successfully retrieved sensor data: {len(sensors_data)} sensors", "Refetch Sensor Names")
-        
-        updated_count = 0
-        
-        # Process sensor data and update local database
-        with get_db_session_context() as db_session:
-            for sensor_id, sensor_info in sensors_data.items():
-                # Extract sensor name from API response
-                api_sensor_name = sensor_info.get('name', f'Sensor {sensor_id}')
-                
-                # Find corresponding sensor in local database
-                local_sensor = db_session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
-                
-                if local_sensor:
-                    # Check if name differs and update if necessary
-                    if local_sensor.name != api_sensor_name:
-                        old_name = local_sensor.name
-                        local_sensor.name = api_sensor_name
-                        updated_count += 1
-                        log_info(f"Updated sensor {sensor_id} name from '{old_name}' to '{api_sensor_name}'", "Refetch Sensor Names")
-                else:
-                    log_info(f"Sensor {sensor_id} found in API but not in local database", "Refetch Sensor Names")
-            
-            # Commit all changes to database
-            db_session.commit()
-        
-        # Prepare success message
-        if updated_count > 0:
-            success_message = f"Successfully updated {updated_count} sensor name(s) from SensorPush API"
-        else:
-            success_message = "All sensor names are already up to date"
-        
-        log_info(f"Sensor name refetch completed. Updated {updated_count} sensors", "Refetch Sensor Names")
-        flash(success_message, 'success')
-        return redirect(url_for('manager_sensor_settings', success=success_message))
-        
-    except Exception as e:
-        error_message = f"Failed to refetch sensor names: {str(e)}"
-        log_warning(error_message, "Refetch Sensor Names")
-        flash(error_message, 'error')
-        return redirect(url_for('manager_sensor_settings', error=error_message))
-
-
-@app.route('/manager/settings/polling', methods=['POST'])
-@require_manager_auth
-def manager_polling_settings():
-    """
-    Handle polling interval configuration.
-    """
-    try:
-        interval_str = request.form.get('polling_interval', '').strip()
-        
-        if not interval_str:
-            return redirect(url_for('manager_settings', error="Polling interval is required"))
-        
-        try:
-            interval = int(interval_str)
-            if interval < 1:
-                return redirect(url_for('manager_settings', error="Polling interval must be at least 1 minute"))
-        except ValueError:
-            return redirect(url_for('manager_settings', error="Invalid polling interval"))
-        
-        # Update the polling interval setting in database
-        if SettingsManager.set_polling_interval(interval):
-            # Update the polling service with the new interval
-            from flask import current_app
-            if hasattr(current_app, 'polling_service'):
-                current_app.polling_service.update_polling_interval(interval)
-                log_info(f"Polling interval updated to {interval} minutes and applied to service", "Manager Settings")
-            else:
-                log_info(f"Polling interval updated to {interval} minutes in database", "Manager Settings")
-            
-            return redirect(url_for('manager_settings', success=f"Polling interval updated to {interval} minutes"))
-        else:
-            return redirect(url_for('manager_settings', error="Failed to update polling interval"))
-            
-    except Exception as e:
-        log_warning(f"Error updating polling interval: {str(e)}", "Manager Settings")
-        return redirect(url_for('manager_settings', error="Error updating polling interval"))
-
-
-@app.errorhandler(404)
-def not_found(error):
-    """Handle 404 errors."""
-    log_warning(f"404 error: {request.url}", "Flask error handler")
-    return jsonify({
-        'success': False,
-        'error': 'Endpoint not found'
-    }), 404
-
-
-@app.errorhandler(405)
-def method_not_allowed(error):
-    """Handle 405 errors."""
-    log_warning(f"405 error: {request.method} {request.url}", "Flask error handler")
-    return jsonify({
-        'success': False,
-        'error': 'Method not allowed'
-    }), 405
-
-
-@app.errorhandler(500)
-def internal_error(error):
-    """Handle 500 errors."""
-    error_handler = get_error_handler()
-    error_id = error_handler.log_and_store_error(error.original_exception if hasattr(error, 'original_exception') else Exception(str(error)), "Flask 500 error handler")
-    return jsonify(error_handler.get_user_friendly_error(error_id)), 500
 
 
 if __name__ == '__main__':
