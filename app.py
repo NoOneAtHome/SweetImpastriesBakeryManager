@@ -26,12 +26,13 @@ from auth import auth_manager, require_manager_auth, setup_initial_pin_from_args
 from settings_manager import SettingsManager, check_threshold_breach
 from sensorpush_api import SensorPushAPI
 
-def create_app(config_name=None):
+def create_app(config_name=None, config_class=None):
     """
     Create and configure the Flask application.
     
     Args:
         config_name (str, optional): Configuration name to use
+        config_class (class, optional): Configuration class to use directly
         
     Returns:
         Flask: Configured Flask application instance
@@ -39,8 +40,11 @@ def create_app(config_name=None):
     app = Flask(__name__)
     
     # Load configuration
-    print(f"create_app called with config_name: {config_name}")
-    if config_name == 'testing':
+    print(f"create_app called with config_name: {config_name}, config_class: {config_class}")
+    if config_class is not None:
+        # Use the provided config class directly
+        config = config_class
+    elif config_name == 'testing':
         config = TestingConfig
     else:
         config = get_config(config_name)
@@ -1040,8 +1044,22 @@ if __name__ == '__main__':
     # Set up initial PIN from command line arguments
     setup_initial_pin_from_args()
     
-    # Run the Flask application
+    # Get configuration first
     config = get_config()
+    
+    # Create the Flask application
+    app = create_app()
+    
+    # Initialize and start the polling service
+    polling_service_instance = create_polling_service(config_class=config)
+    polling_service_instance.start()
+
+    # Register a teardown function to stop the polling service when the app context ends
+    @app.teardown_appcontext
+    def stop_polling_service(exception=None):
+        if polling_service_instance.is_running():
+            polling_service_instance.stop()
+
     log_info("Starting Flask application", "Flask startup")
 
     app.run(
