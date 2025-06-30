@@ -147,6 +147,30 @@
                         </div>
                     </div>
 
+                    <!-- Category Settings -->
+                    <div class="collapsible">
+                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                            <span>Category Settings</span>
+                            <span class="collapsible-toggle">▼</span>
+                        </div>
+                        <div class="collapsible-content">
+                            <form method="POST" action="{{ url_for('manager_sensor_settings') }}">
+                                <input type="hidden" name="sensor_id" value="{{ sensor.sensor_id }}">
+                                <input type="hidden" name="action" value="update_category">
+                                <div class="form-group">
+                                    <label for="category_{{ sensor.sensor_id }}">Category</label>
+                                    <select id="category_{{ sensor.sensor_id }}" name="category" required>
+                                        <option value="">-- Select Category --</option>
+                                        {% for cat in categories %}
+                                            <option value="{{ cat }}" {% if sensor.category == cat %}selected{% endif %}>{{ cat }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn-primary btn-small">Update Category</button>
+                            </form>
+                        </div>
+                    </div>
+
                     <!-- Action Buttons -->
                     <div class="action-buttons">
                         <form method="POST" action="{{ url_for('manager_sensor_settings') }}" style="display: inline-block; margin: 0;">

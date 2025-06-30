@@ -805,7 +805,12 @@ def register_routes(app):
                 active_sensors = session.query(Sensor).filter(Sensor.active == True).all()
                 
                 sensors_with_readings = []
-                categorized_sensor_ids = {'freezer': [], 'refrigerator': [], 'ambient': []}
+                categorized_sensor_ids = {
+                    'freezer': [],
+                    'refrigerator': [],
+                    'ambient': [],
+                    'other': []
+                }
                 current_utc_time = datetime.now(UTC)
                 
                 for sensor in active_sensors:
@@ -837,15 +842,14 @@ def register_routes(app):
                         'is_stale': is_stale
                     }
                     sensors_with_readings.append(sensor_data)
-                    
-                    # Categorize sensors for the charts
-                    if sensor.category and sensor.category in categorized_sensor_ids:
-                        categorized_sensor_ids[sensor.category].append(sensor.sensor_id)
-                    elif sensor.category:
-                        # Handle unknown categories by creating them dynamically
-                        if sensor.category not in categorized_sensor_ids:
-                            categorized_sensor_ids[sensor.category] = []
-                        categorized_sensor_ids[sensor.category].append(sensor.sensor_id)
+                
+                # Categorize sensors by their category
+                for sensor in active_sensors:
+                    category = sensor.category if sensor.category else 'other'  # Default to 'other' if category is None
+                    if category in categorized_sensor_ids:
+                        categorized_sensor_ids[category].append(sensor.sensor_id)
+                    else:
+                        categorized_sensor_ids['other'].append(sensor.sensor_id)  # Handle unexpected categories
                 
                 log_info(f"Dashboard loaded with {len(sensors_with_readings)} active sensors", "Web Interface")
                 log_info(f"Categorized sensors: {categorized_sensor_ids}", "Web Interface")
@@ -1073,13 +1077,30 @@ def register_routes(app):
                             
                         except ValueError:
                             return redirect(url_for('manager_sensor_settings', error="Invalid threshold values"))
+                    
+                    elif action == 'update_category':
+                        new_category = request.form.get('category')
+                        if not new_category:
+                            flash('Category cannot be empty.', 'error')
+                        else:
+                            sensor = db_session.query(Sensor).filter_by(sensor_id=sensor_id).first()
+                            if sensor:
+                                sensor.category = new_category
+                                db_session.commit()
+                                flash(f'Category for {sensor.name} updated successfully!', 'success')
+                            else:
+                                flash('Sensor not found.', 'error')
             
             # GET request - show sensor settings page
+            # Define available categories
+            categories = ["freezer", "refrigerator", "ambient", "other"]
+            
             with get_db_session_context() as db_session:
                 sensors = db_session.query(Sensor).all()
                 
             return render_template('manager_sensor_settings.html',
                                  sensors=sensors,
+                                 categories=categories,
                                  success=request.args.get('success'),
                                  error=request.args.get('error'))
                                  

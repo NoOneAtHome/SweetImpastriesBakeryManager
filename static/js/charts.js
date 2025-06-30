@@ -741,6 +741,12 @@ function resetChartZoom(canvasId) {
         chart = dashboardChart;
     } else if (canvasId === 'sensorDetailChart' && sensorDetailChart) {
         chart = sensorDetailChart;
+    } else if (canvasId === 'freezerChart' && freezerChartInstance) {
+        chart = freezerChartInstance;
+    } else if (canvasId === 'refrigeratorChart' && refrigeratorChartInstance) {
+        chart = refrigeratorChartInstance;
+    } else if (canvasId === 'ambientChart' && ambientChartInstance) {
+        chart = ambientChartInstance;
     }
     
     if (chart && chart.resetZoom) {
@@ -926,13 +932,25 @@ let ambientChartInstance = null;
  * @param {string} timeSlice - Time slice for data range
  * @param {boolean} hourlyAverage - Whether to display hourly averaged data
  */
+/**
+ * Render all categorized charts (freezer, refrigerator, ambient)
+ * This function renders three separate charts for categorized sensors using the categorized_sensor_ids
+ * passed from the backend. Each chart displays sensors of the same category with a single y-axis.
+ *
+ * @param {Object} categorizedSensorIds - Object with category -> sensor IDs mapping
+ * @param {string} timeSlice - Time slice for data range
+ * @param {boolean} hourlyAverage - Whether to display hourly averaged data
+ */
 async function renderAllCategorizedCharts(categorizedSensorIds, timeSlice, hourlyAverage) {
     const timeRange = calculateTimeRange(timeSlice);
-    const categories = Object.keys(categorizedSensorIds);
+    const categories = ['freezer', 'refrigerator', 'ambient']; // Ensure we process these three categories
     
     console.log('Rendering categorized charts for categories:', categories);
+    console.log('Categorized sensor IDs:', categorizedSensorIds);
     console.log('Time range:', timeRange);
+    console.log('Hourly average:', hourlyAverage);
     
+    // Process each category sequentially to render individual charts
     for (const category of categories) {
         const sensorIds = categorizedSensorIds[category];
         
@@ -959,46 +977,57 @@ async function renderAllCategorizedCharts(categorizedSensorIds, timeSlice, hourl
                 continue;
             }
             
+            // Process data using the categorized chart processing function (single y-axis)
             const processedData = processCategorizedSensorDataForChart(rawData);
-            const title = `${category.charAt(0).toUpperCase() + category.slice(1)} Sensors Temperature`;
+            
+            // Create chart title with time slice information
+            const timeLabel = getTimeSliceLabel(timeSlice);
+            const title = `${category.charAt(0).toUpperCase() + category.slice(1)} Sensors - ${timeLabel}${hourlyAverage ? ' (Hourly Average)' : ''}`;
+            
+            // Create chart configuration using the categorized chart config function
             const config = createCategorizedChartConfig(processedData, title, hourlyAverage);
             
-            let chartInstance;
             const canvasId = `${category}Chart`;
+            const canvas = document.getElementById(canvasId);
             
-            // Destroy existing chart instance if it exists
+            if (!canvas) {
+                console.error(`Canvas element with ID '${canvasId}' not found`);
+                continue;
+            }
+            
+            // Destroy existing chart instance if it exists and create new chart
             switch (category) {
                 case 'freezer':
                     if (freezerChartInstance) {
                         freezerChartInstance.destroy();
+                        freezerChartInstance = null;
                     }
-                    chartInstance = new Chart(document.getElementById(canvasId), config);
-                    freezerChartInstance = chartInstance;
+                    freezerChartInstance = new Chart(canvas, config);
                     break;
                 case 'refrigerator':
                     if (refrigeratorChartInstance) {
                         refrigeratorChartInstance.destroy();
+                        refrigeratorChartInstance = null;
                     }
-                    chartInstance = new Chart(document.getElementById(canvasId), config);
-                    refrigeratorChartInstance = chartInstance;
+                    refrigeratorChartInstance = new Chart(canvas, config);
                     break;
                 case 'ambient':
                     if (ambientChartInstance) {
                         ambientChartInstance.destroy();
+                        ambientChartInstance = null;
                     }
-                    chartInstance = new Chart(document.getElementById(canvasId), config);
-                    ambientChartInstance = chartInstance;
+                    ambientChartInstance = new Chart(canvas, config);
                     break;
                 default:
                     console.warn(`Unknown category: ${category}`);
                     continue;
             }
             
-            console.log(`Successfully rendered chart for category: ${category}`);
+            console.log(`Successfully rendered chart for category: ${category} with ${Object.keys(rawData).length} sensors`);
             
         } catch (error) {
             console.error(`Error rendering chart for category ${category}:`, error);
-            displayChartError(`${category}Chart`, `Error loading data: ${error.message}`);
+            displayChartError(`${category}Chart`, `Error loading ${category} data: ${error.message}`);
         }
     }
 }
@@ -1036,10 +1065,97 @@ function displayChartError(canvasId, message) {
     }
 }
 
+/**
+ * Render a single categorized chart for a specific category
+ * @param {string} category - The category ('freezer', 'refrigerator', 'ambient')
+ * @param {Array} sensorIds - Array of sensor IDs for this category
+ * @param {string} timeSlice - Time slice for data range
+ * @param {boolean} hourlyAverage - Whether to display hourly averaged data
+ */
+async function renderCategorizedChart(category, sensorIds, timeSlice = '12h', hourlyAverage = true) {
+    if (!sensorIds || sensorIds.length === 0) {
+        console.warn(`No sensors found for category: ${category}`);
+        clearChart(`${category}Chart`);
+        return;
+    }
+    
+    try {
+        const timeRange = calculateTimeRange(timeSlice);
+        console.log(`Fetching data for ${category} sensors:`, sensorIds);
+        
+        // Fetch data for all sensors in the current category
+        const rawData = await fetchMultiSensorHistoricalData(
+            sensorIds,
+            timeRange.startTime,
+            timeRange.endTime,
+            hourlyAverage
+        );
+        
+        if (!rawData || Object.keys(rawData).length === 0) {
+            console.warn(`No data returned for category: ${category}`);
+            clearChart(`${category}Chart`);
+            return;
+        }
+        
+        // Process data using the categorized chart processing function
+        const processedData = processCategorizedSensorDataForChart(rawData);
+        
+        // Create chart title with time slice information
+        const timeLabel = getTimeSliceLabel(timeSlice);
+        const title = `${category.charAt(0).toUpperCase() + category.slice(1)} Sensors - ${timeLabel}${hourlyAverage ? ' (Hourly Average)' : ''}`;
+        
+        // Create chart configuration
+        const config = createCategorizedChartConfig(processedData, title, hourlyAverage);
+        
+        const canvasId = `${category}Chart`;
+        const canvas = document.getElementById(canvasId);
+        
+        if (!canvas) {
+            console.error(`Canvas element with ID '${canvasId}' not found`);
+            return;
+        }
+        
+        // Destroy existing chart instance if it exists and create new chart
+        switch (category) {
+            case 'freezer':
+                if (freezerChartInstance) {
+                    freezerChartInstance.destroy();
+                    freezerChartInstance = null;
+                }
+                freezerChartInstance = new Chart(canvas, config);
+                break;
+            case 'refrigerator':
+                if (refrigeratorChartInstance) {
+                    refrigeratorChartInstance.destroy();
+                    refrigeratorChartInstance = null;
+                }
+                refrigeratorChartInstance = new Chart(canvas, config);
+                break;
+            case 'ambient':
+                if (ambientChartInstance) {
+                    ambientChartInstance.destroy();
+                    ambientChartInstance = null;
+                }
+                ambientChartInstance = new Chart(canvas, config);
+                break;
+            default:
+                console.warn(`Unknown category: ${category}`);
+                return;
+        }
+        
+        console.log(`Successfully rendered chart for category: ${category} with ${Object.keys(rawData).length} sensors`);
+        
+    } catch (error) {
+        console.error(`Error rendering chart for category ${category}:`, error);
+        displayChartError(`${category}Chart`, `Error loading ${category} data: ${error.message}`);
+    }
+}
+
 // Export functions for global access
 window.renderSensorChart = renderSensorChart;
 window.renderDashboardChart = renderDashboardChart;
 window.handleTimeSliceChange = handleTimeSliceChange;
+window.resetChartZoom = resetChartZoom;
 window.fetchHistoricalData = fetchHistoricalData;
 window.fetchMultiSensorHistoricalData = fetchMultiSensorHistoricalData;
 window.processMultiSensorDataForChart = processMultiSensorDataForChart;
@@ -1047,5 +1163,7 @@ window.processCategorizedSensorDataForChart = processCategorizedSensorDataForCha
 window.createCategorizedChartConfig = createCategorizedChartConfig;
 window.fetchCategorizedSensorHistory = fetchCategorizedSensorHistory;
 window.renderAllCategorizedCharts = renderAllCategorizedCharts;
+window.renderCategorizedChart = renderCategorizedChart;
 window.clearChart = clearChart;
 window.displayChartError = displayChartError;
+window.getTimeSliceLabel = getTimeSliceLabel;

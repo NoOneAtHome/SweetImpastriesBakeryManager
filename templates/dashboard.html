@@ -135,14 +135,17 @@ let currentGlobalTimeSlice = '12h';
 let currentGlobalHourlyAverage = true;
 
 // Get categorized sensor IDs for the dashboard charts
+var freezerSensorIds = {{ categorized_sensor_ids.freezer | tojson }};
+var refrigeratorSensorIds = {{ categorized_sensor_ids.refrigerator | tojson }};
+var ambientSensorIds = {{ categorized_sensor_ids.ambient | tojson }};
+var otherSensorIds = {{ categorized_sensor_ids.other | tojson }}; // Include 'other' for completeness, though it might not have a dedicated chart initially
+
+// Keep the original structure for backward compatibility with existing chart functions
 const categorizedSensorIds = {
-    {% for category, ids in categorized_sensor_ids.items() %}
-    '{{ category }}': [
-        {% for sensor_id in ids %}
-        '{{ sensor_id }}'{% if not loop.last %},{% endif %}
-        {% endfor %}
-    ]{% if not loop.last %},{% endif %}
-    {% endfor %}
+    'freezer': freezerSensorIds,
+    'refrigerator': refrigeratorSensorIds,
+    'ambient': ambientSensorIds,
+    'other': otherSensorIds
 };
 
 function updateAllCharts(timeSlice) {
