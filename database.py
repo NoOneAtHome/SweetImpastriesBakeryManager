@@ -80,6 +80,8 @@ def migrate_database():
     Currently handles:
     - Adding battery_voltage column to sensor_readings table if missing
     - Adding level column to errors table if missing
+    - Adding source column to errors table if missing
+    - Adding category column to sensors table if missing
     
     Returns:
         bool: True if migrations completed successfully, False otherwise
@@ -117,6 +119,53 @@ def migrate_database():
                 print("Adding missing source column to errors table...")
                 session.execute(text("ALTER TABLE errors ADD COLUMN source STRING DEFAULT 'application'"))
                 migrations_performed.append("Added source column to errors")
+            
+            # Check if category column exists in sensors table
+            category_column_added = False
+            try:
+                session.execute(text("SELECT category FROM sensors LIMIT 1"))
+                print("Database schema check: category column exists in sensors table")
+            except Exception:
+                # Column doesn't exist, need to add it
+                print("Adding missing category column to sensors table...")
+                session.execute(text("ALTER TABLE sensors ADD COLUMN category TEXT"))
+                migrations_performed.append("Added category column to sensors")
+                category_column_added = True
+            
+            # If category column was just added, populate default categories based on sensor names
+            if category_column_added:
+                print("Setting default categories based on sensor names...")
+                
+                # Get all sensors
+                result = session.execute(text("SELECT sensor_id, name FROM sensors"))
+                sensors = result.fetchall()
+                
+                updated_count = 0
+                for sensor_id, name in sensors:
+                    category = None
+                    name_lower = name.lower()
+                    
+                    # Simple heuristic to categorize sensors based on name
+                    if any(keyword in name_lower for keyword in ['freezer', 'freeze', 'frozen']):
+                        category = 'freezer'
+                    elif any(keyword in name_lower for keyword in ['fridge', 'refrigerator', 'refrig', 'cooler']):
+                        category = 'refrigerator'
+                    elif any(keyword in name_lower for keyword in ['ambient', 'room', 'office', 'kitchen', 'dining']):
+                        category = 'ambient'
+                    
+                    if category:
+                        session.execute(
+                            text("UPDATE sensors SET category = :category WHERE sensor_id = :sensor_id"),
+                            {"category": category, "sensor_id": sensor_id}
+                        )
+                        updated_count += 1
+                        print(f"  - Set sensor '{name}' ({sensor_id}) to category '{category}'")
+                
+                if updated_count > 0:
+                    print(f"✓ Updated {updated_count} sensors with default categories.")
+                    migrations_performed.append(f"Set default categories for {updated_count} sensors")
+                else:
+                    print("ℹ No sensors were automatically categorized. Categories can be set manually through the manager interface.")
             
             # Commit all migrations
             if migrations_performed:
