@@ -671,6 +671,172 @@ function getTimeSliceLabel(timeSlice) {
     return labels[timeSlice] || 'Last 12 Hours';
 }
 
+/**
+ * Fetch historical data for sensors within a specific category
+ * @param {string} category - The sensor category ('freezer', 'refrigerator', 'ambient')
+ * @param {string} startTime - Start time in ISO format (optional)
+ * @param {string} endTime - End time in ISO format (optional)
+ * @param {boolean} hourlyAverage - Whether to return hourly averaged data (optional)
+ * @returns {Promise<Object>} Object with sensor data organized by sensor ID
+ */
+async function fetchCategorizedSensorHistory(category, startTime = null, endTime = null, hourlyAverage = false) {
+    try {
+        let url = `/api/categorized_sensor_history?category=${encodeURIComponent(category)}`;
+        
+        if (startTime) {
+            url += `&start_time=${encodeURIComponent(startTime)}`;
+        }
+        if (endTime) {
+            url += `&end_time=${encodeURIComponent(endTime)}`;
+        }
+        if (hourlyAverage) {
+            url += `&hourly_average=true`;
+        }
+        
+        console.log(`Fetching categorized data from: ${url}`);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error || 'Failed to fetch categorized sensor history');
+        }
+        
+        console.log(`Fetched categorized data for category ${category}:`, result.data);
+        return result.data;
+    } catch (error) {
+        console.error(`Error fetching categorized sensor history for ${category}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Global chart instances for categorized charts
+ */
+let freezerChartInstance = null;
+let refrigeratorChartInstance = null;
+let ambientChartInstance = null;
+
+/**
+ * Render all categorized charts (freezer, refrigerator, ambient)
+ * @param {Object} categorizedSensorIds - Object with category -> sensor IDs mapping
+ * @param {string} timeSlice - Time slice for data range
+ * @param {boolean} hourlyAverage - Whether to display hourly averaged data
+ */
+async function renderAllCategorizedCharts(categorizedSensorIds, timeSlice, hourlyAverage) {
+    const timeRange = calculateTimeRange(timeSlice);
+    const categories = Object.keys(categorizedSensorIds);
+    
+    console.log('Rendering categorized charts for categories:', categories);
+    console.log('Time range:', timeRange);
+    
+    for (const category of categories) {
+        const sensorIds = categorizedSensorIds[category];
+        
+        if (!sensorIds || sensorIds.length === 0) {
+            console.warn(`No sensors found for category: ${category}`);
+            clearChart(`${category}Chart`);
+            continue;
+        }
+        
+        try {
+            console.log(`Fetching data for ${category} sensors:`, sensorIds);
+            
+            // Fetch data for all sensors in the current category using the multi-sensor endpoint
+            const rawData = await fetchMultiSensorHistoricalData(
+                sensorIds,
+                timeRange.startTime,
+                timeRange.endTime,
+                hourlyAverage
+            );
+            
+            if (!rawData || Object.keys(rawData).length === 0) {
+                console.warn(`No data returned for category: ${category}`);
+                clearChart(`${category}Chart`);
+                continue;
+            }
+            
+            const processedData = processMultiSensorDataForChart(rawData);
+            const title = `${category.charAt(0).toUpperCase() + category.slice(1)} Sensors Temperature`;
+            const config = createChartConfig(processedData, title, hourlyAverage, true);
+            
+            let chartInstance;
+            const canvasId = `${category}Chart`;
+            
+            // Destroy existing chart instance if it exists
+            switch (category) {
+                case 'freezer':
+                    if (freezerChartInstance) {
+                        freezerChartInstance.destroy();
+                    }
+                    chartInstance = new Chart(document.getElementById(canvasId), config);
+                    freezerChartInstance = chartInstance;
+                    break;
+                case 'refrigerator':
+                    if (refrigeratorChartInstance) {
+                        refrigeratorChartInstance.destroy();
+                    }
+                    chartInstance = new Chart(document.getElementById(canvasId), config);
+                    refrigeratorChartInstance = chartInstance;
+                    break;
+                case 'ambient':
+                    if (ambientChartInstance) {
+                        ambientChartInstance.destroy();
+                    }
+                    chartInstance = new Chart(document.getElementById(canvasId), config);
+                    ambientChartInstance = chartInstance;
+                    break;
+                default:
+                    console.warn(`Unknown category: ${category}`);
+                    continue;
+            }
+            
+            console.log(`Successfully rendered chart for category: ${category}`);
+            
+        } catch (error) {
+            console.error(`Error rendering chart for category ${category}:`, error);
+            displayChartError(`${category}Chart`, `Error loading data: ${error.message}`);
+        }
+    }
+}
+
+/**
+ * Clear a chart canvas and display a message
+ * @param {string} canvasId - Canvas element ID
+ */
+function clearChart(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#999';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('No sensors configured for this category or no data available.', canvas.width / 2, canvas.height / 2);
+    }
+}
+
+/**
+ * Display an error message on a chart canvas
+ * @param {string} canvasId - Canvas element ID
+ * @param {string} message - Error message to display
+ */
+function displayChartError(canvasId, message) {
+    const canvas = document.getElementById(canvasId);
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#dc3545'; // Red color for error
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+    }
+}
+
 // Export functions for global access
 window.renderSensorChart = renderSensorChart;
 window.renderDashboardChart = renderDashboardChart;
@@ -678,3 +844,7 @@ window.handleTimeSliceChange = handleTimeSliceChange;
 window.fetchHistoricalData = fetchHistoricalData;
 window.fetchMultiSensorHistoricalData = fetchMultiSensorHistoricalData;
 window.processMultiSensorDataForChart = processMultiSensorDataForChart;
+window.fetchCategorizedSensorHistory = fetchCategorizedSensorHistory;
+window.renderAllCategorizedCharts = renderAllCategorizedCharts;
+window.clearChart = clearChart;
+window.displayChartError = displayChartError;

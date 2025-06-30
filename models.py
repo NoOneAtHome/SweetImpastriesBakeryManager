@@ -28,12 +28,13 @@ class Sensor(Base):
     max_temp = Column(Float, nullable=False)
     min_humidity = Column(Float, nullable=False)
     max_humidity = Column(Float, nullable=False)
+    category = Column(String, nullable=True)  # New field for sensor categorization
     
     # Relationship to sensor readings
     readings = relationship("SensorReading", back_populates="sensor", cascade="all, delete-orphan")
     
     def __repr__(self):
-        return f"<Sensor(sensor_id='{self.sensor_id}', name='{self.name}', active={self.active})>"
+        return f"<Sensor(sensor_id='{self.sensor_id}', name='{self.name}', active={self.active}, category='{self.category}')>"
 
 
 class SensorReading(Base):

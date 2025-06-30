@@ -614,6 +614,183 @@ def register_routes(app):
             response, status_code = handle_flask_error(e, "API /api/multi_sensor_historical_data")
             return jsonify(response), status_code
 
+    @app.route('/api/categorized_sensor_history', methods=['GET'])
+    def get_categorized_sensor_history():
+        """
+        Get historical sensor data for all sensors within a specific category.
+        
+        Query Parameters:
+            category (str): Sensor category ('freezer', 'refrigerator', 'ambient') (required)
+            start_time (str): Start time in ISO format (optional, defaults to 24 hours ago)
+            end_time (str): End time in ISO format (optional, defaults to now)
+            hourly_average (str): If 'true', return hourly averaged data (optional, defaults to false)
+            
+        Returns:
+            JSON response with historical sensor readings organized by sensor within the category.
+            Structure: {
+                "success": true,
+                "data": {
+                    "sensor_id_1": {
+                        "name": "Sensor Name",
+                        "data": [{"timestamp": "...", "temperature": ..., "humidity": ...}, ...]
+                    },
+                    "sensor_id_2": {...}
+                },
+                "category": "freezer",
+                "time_slice": "24h",
+                "start_time": "ISO_FORMAT",
+                "end_time": "ISO_FORMAT"
+            }
+        """
+        try:
+            # Get query parameters
+            category = request.args.get('category')
+            start_time_str = request.args.get('start_time')
+            end_time_str = request.args.get('end_time')
+            hourly_average_str = request.args.get('hourly_average', 'false').lower()
+            hourly_average = hourly_average_str in ('true', '1', 'yes')
+            
+            log_info(f"Retrieving categorized sensor history for category={category}, start_time={start_time_str}, end_time={end_time_str}, hourly_average={hourly_average}", "API /api/categorized_sensor_history")
+            
+            # Validate required parameters
+            if not category:
+                log_warning("Missing category parameter", "API /api/categorized_sensor_history")
+                return jsonify({
+                    'success': False,
+                    'error': 'Missing required parameter: category'
+                }), 400
+            
+            # Set default time range (24 hours ago to now)
+            now = datetime.now(UTC)
+            default_start_time = now - timedelta(hours=24)
+            
+            # Parse start_time
+            if start_time_str:
+                try:
+                    start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                    if start_time.tzinfo is None:
+                        start_time = start_time.replace(tzinfo=UTC)
+                except ValueError:
+                    log_warning(f"Invalid start_time format: {start_time_str}", "API /api/categorized_sensor_history")
+                    return jsonify({
+                        'success': False,
+                        'error': 'Invalid start_time format. Use ISO format (e.g., 2025-01-01T12:00:00Z)'
+                    }), 400
+            else:
+                start_time = default_start_time
+            
+            # Parse end_time
+            if end_time_str:
+                try:
+                    end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+                    if end_time.tzinfo is None:
+                        end_time = end_time.replace(tzinfo=UTC)
+                except ValueError:
+                    log_warning(f"Invalid end_time format: {end_time_str}", "API /api/categorized_sensor_history")
+                    return jsonify({
+                        'success': False,
+                        'error': 'Invalid end_time format. Use ISO format (e.g., 2025-01-01T12:00:00Z)'
+                    }), 400
+            else:
+                end_time = now
+            
+            # Validate time range
+            if start_time >= end_time:
+                log_warning(f"Invalid time range: start_time ({start_time}) >= end_time ({end_time})", "API /api/categorized_sensor_history")
+                return jsonify({
+                    'success': False,
+                    'error': 'start_time must be before end_time'
+                }), 400
+            
+            result = {}
+            
+            with get_db_session_context() as session:
+                # Get all active sensors in the specified category
+                sensors_in_category = session.query(Sensor).filter(
+                    and_(Sensor.active == True, Sensor.category == category)
+                ).all()
+                
+                if not sensors_in_category:
+                    log_info(f"No active sensors found for category: {category}", "API /api/categorized_sensor_history")
+                    return jsonify({
+                        'success': True,
+                        'data': {},
+                        'category': category,
+                        'start_time': start_time.isoformat(),
+                        'end_time': end_time.isoformat()
+                    })
+                
+                # Process each sensor in the category
+                for sensor in sensors_in_category:
+                    sensor_id = sensor.sensor_id
+                    
+                    if hourly_average:
+                        # Get hourly averaged data using SQL aggregation
+                        readings = session.query(
+                            func.strftime('%Y-%m-%d %H:00:00', SensorReading.timestamp).label('hour'),
+                            func.avg(SensorReading.temperature).label('avg_temperature'),
+                            func.avg(SensorReading.humidity).label('avg_humidity'),
+                            func.avg(SensorReading.battery_voltage).label('battery_voltage')
+                        ).filter(and_(
+                            SensorReading.sensor_id == sensor_id,
+                            SensorReading.timestamp >= start_time,
+                            SensorReading.timestamp <= end_time
+                        )).group_by(
+                            func.strftime('%Y-%m-%d %H:00:00', SensorReading.timestamp)
+                        ).order_by(
+                            func.strftime('%Y-%m-%d %H:00:00', SensorReading.timestamp)
+                        ).all()
+                        
+                        # Format hourly averaged data
+                        historical_data = []
+                        for reading in readings:
+                            hour_datetime = datetime.strptime(reading.hour, '%Y-%m-%d %H:%M:%S').replace(tzinfo=UTC)
+                            historical_data.append({
+                                'timestamp': hour_datetime.isoformat(),
+                                'temperature': round(float(reading.avg_temperature), 2),
+                                'humidity': round(float(reading.avg_humidity), 2),
+                                'battery_voltage': round(float(reading.battery_voltage), 2) if reading.battery_voltage is not None else None
+                            })
+                    else:
+                        # Get raw historical readings within the time range
+                        readings = session.query(SensorReading)\
+                            .filter(and_(
+                                SensorReading.sensor_id == sensor_id,
+                                SensorReading.timestamp >= start_time,
+                                SensorReading.timestamp <= end_time
+                            ))\
+                            .order_by(SensorReading.timestamp)\
+                            .all()
+                        
+                        # Format response data
+                        historical_data = []
+                        for reading in readings:
+                            historical_data.append({
+                                'timestamp': reading.timestamp.isoformat(),
+                                'temperature': reading.temperature,
+                                'humidity': reading.humidity,
+                                'battery_voltage': reading.battery_voltage
+                            })
+                    
+                    # Add sensor data to result
+                    result[sensor_id] = {
+                        'name': sensor.name,
+                        'data': historical_data
+                    }
+                
+                log_info(f"Successfully retrieved categorized sensor history for {len(result)} sensors in category {category}", "API /api/categorized_sensor_history")
+                return jsonify({
+                    'success': True,
+                    'data': result,
+                    'category': category,
+                    'start_time': start_time.isoformat(),
+                    'end_time': end_time.isoformat()
+                })
+                
+        except Exception as e:
+            response, status_code = handle_flask_error(e, "API /api/categorized_sensor_history")
+            return jsonify(response), status_code
+
     # Web Interface Routes
     @app.route('/')
     def index():
@@ -628,6 +805,7 @@ def register_routes(app):
                 active_sensors = session.query(Sensor).filter(Sensor.active == True).all()
                 
                 sensors_with_readings = []
+                categorized_sensor_ids = {'freezer': [], 'refrigerator': [], 'ambient': []}
                 current_utc_time = datetime.now(UTC)
                 
                 for sensor in active_sensors:
@@ -659,9 +837,21 @@ def register_routes(app):
                         'is_stale': is_stale
                     }
                     sensors_with_readings.append(sensor_data)
+                    
+                    # Categorize sensors for the charts
+                    if sensor.category and sensor.category in categorized_sensor_ids:
+                        categorized_sensor_ids[sensor.category].append(sensor.sensor_id)
+                    elif sensor.category:
+                        # Handle unknown categories by creating them dynamically
+                        if sensor.category not in categorized_sensor_ids:
+                            categorized_sensor_ids[sensor.category] = []
+                        categorized_sensor_ids[sensor.category].append(sensor.sensor_id)
                 
                 log_info(f"Dashboard loaded with {len(sensors_with_readings)} active sensors", "Web Interface")
-                return render_template('dashboard.html', sensors_data=sensors_with_readings)
+                log_info(f"Categorized sensors: {categorized_sensor_ids}", "Web Interface")
+                return render_template('dashboard.html',
+                                     sensors_data=sensors_with_readings,
+                                     categorized_sensor_ids=categorized_sensor_ids)
                 
         except Exception as e:
             log_warning(f"Error loading dashboard: {str(e)}", "Web Interface")
@@ -1048,7 +1238,8 @@ def serialize_sensor(sensor):
         'min_temp': sensor.min_temp,
         'max_temp': sensor.max_temp,
         'min_humidity': sensor.min_humidity,
-        'max_humidity': sensor.max_humidity
+        'max_humidity': sensor.max_humidity,
+        'category': sensor.category
     }
 
 

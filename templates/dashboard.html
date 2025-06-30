@@ -6,11 +6,11 @@
 <div class="dashboard">
     <h2>Sensor Overview</h2>
     
-    <!-- Chart Container for Dashboard Overview -->
-    {% if sensors_data %}
+    <!-- Global Chart Controls -->
+    {% if categorized_sensor_ids %}
     <div style="margin-bottom: 1rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-            <h3 style="color: #002B5B; margin: 0;">Sensor Data Overview</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="color: #002B5B; margin: 0;">Categorized Sensor Data Overview</h3>
             <div style="display: flex; align-items: center; gap: 1rem;">
                 <div class="hourly-average-control">
                     <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: #002B5B; cursor: pointer;">
@@ -19,17 +19,36 @@
                     </label>
                 </div>
                 <div class="time-slice-controls">
-                    <button class="time-slice-btn" data-slice="4h" onclick="updateDashboardChart('4h')">4h</button>
-                    <button class="time-slice-btn" data-slice="8h" onclick="updateDashboardChart('8h')">8h</button>
-                    <button class="time-slice-btn active" data-slice="12h" onclick="updateDashboardChart('12h')">12h</button>
-                    <button class="time-slice-btn" data-slice="24h" onclick="updateDashboardChart('24h')">24h</button>
-                    <button class="time-slice-btn" data-slice="7d" onclick="updateDashboardChart('7d')">7d</button>
-                    <button class="time-slice-btn" data-slice="30d" onclick="updateDashboardChart('30d')">30d</button>
+                    <button class="time-slice-btn" data-slice="4h" onclick="updateAllCharts('4h')">4h</button>
+                    <button class="time-slice-btn" data-slice="8h" onclick="updateAllCharts('8h')">8h</button>
+                    <button class="time-slice-btn active" data-slice="12h" onclick="updateAllCharts('12h')">12h</button>
+                    <button class="time-slice-btn" data-slice="24h" onclick="updateAllCharts('24h')">24h</button>
+                    <button class="time-slice-btn" data-slice="7d" onclick="updateAllCharts('7d')">7d</button>
+                    <button class="time-slice-btn" data-slice="30d" onclick="updateAllCharts('30d')">30d</button>
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Categorized Chart Containers -->
+    <div class="chart-section" style="margin-bottom: 2rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        <h3 style="color: #002B5B; margin: 0 0 1rem 0;">Freezer Sensors</h3>
         <div style="height: 400px;">
-            <canvas id="dashboardChart"></canvas>
+            <canvas id="freezerChart"></canvas>
+        </div>
+    </div>
+
+    <div class="chart-section" style="margin-bottom: 2rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        <h3 style="color: #002B5B; margin: 0 0 1rem 0;">Refrigerator Sensors</h3>
+        <div style="height: 400px;">
+            <canvas id="refrigeratorChart"></canvas>
+        </div>
+    </div>
+
+    <div class="chart-section" style="margin-bottom: 2rem; background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        <h3 style="color: #002B5B; margin: 0 0 1rem 0;">Ambient Sensors</h3>
+        <div style="height: 400px;">
+            <canvas id="ambientChart"></canvas>
         </div>
     </div>
     {% endif %}
@@ -109,20 +128,25 @@
 </div>
 
 
-{% if sensors_data %}
+{% if categorized_sensor_ids %}
 <script>
-// Dashboard chart functionality
-let currentDashboardTimeSlice = '12h';
+// Categorized dashboard chart functionality
+let currentGlobalTimeSlice = '12h';
+let currentGlobalHourlyAverage = true;
 
-// Get all sensor IDs for the dashboard chart
-const allSensorIds = [
-    {% for sensor_data in sensors_data %}
-    '{{ sensor_data.sensor.sensor_id }}'{% if not loop.last %},{% endif %}
+// Get categorized sensor IDs for the dashboard charts
+const categorizedSensorIds = {
+    {% for category, ids in categorized_sensor_ids.items() %}
+    '{{ category }}': [
+        {% for sensor_id in ids %}
+        '{{ sensor_id }}'{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ]{% if not loop.last %},{% endif %}
     {% endfor %}
-];
+};
 
-function updateDashboardChart(timeSlice) {
-    currentDashboardTimeSlice = timeSlice;
+function updateAllCharts(timeSlice) {
+    currentGlobalTimeSlice = timeSlice;
     
     // Update button states
     document.querySelectorAll('.time-slice-btn').forEach(btn => {
@@ -130,30 +154,35 @@ function updateDashboardChart(timeSlice) {
     });
     document.querySelector('[data-slice="' + timeSlice + '"]').classList.add('active');
     
-    // Get hourly average checkbox state
-    const hourlyAverageCheckbox = document.getElementById('hourlyAverageCheckbox');
-    const hourlyAverage = hourlyAverageCheckbox ? hourlyAverageCheckbox.checked : false;
-    
-    // Render multi-sensor dashboard chart
-    renderDashboardChart(allSensorIds, timeSlice, hourlyAverage);
+    renderCategorizedCharts();
 }
 
-function handleHourlyAverageChange() {
-    // Re-render chart when checkbox state changes
-    updateDashboardChart(currentDashboardTimeSlice);
+function handleGlobalHourlyAverageChange() {
+    currentGlobalHourlyAverage = document.getElementById('hourlyAverageCheckbox').checked;
+    renderCategorizedCharts();
 }
 
-// Initialize dashboard chart when page loads
+function renderCategorizedCharts() {
+    // Call the new function in charts.js to render all three charts
+    renderAllCategorizedCharts(
+        categorizedSensorIds,
+        currentGlobalTimeSlice,
+        currentGlobalHourlyAverage
+    );
+}
+
+// Initialize categorized dashboard charts when page loads
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Initializing dashboard chart...');
+    console.log('Initializing categorized dashboard charts...');
+    console.log('Categorized sensor IDs:', categorizedSensorIds);
     
     // Add event listener to hourly average checkbox
     const hourlyAverageCheckbox = document.getElementById('hourlyAverageCheckbox');
     if (hourlyAverageCheckbox) {
-        hourlyAverageCheckbox.addEventListener('change', handleHourlyAverageChange);
+        hourlyAverageCheckbox.addEventListener('change', handleGlobalHourlyAverageChange);
     }
     
-    updateDashboardChart('12h');
+    updateAllCharts('12h'); // Initial render
 });
 </script>
 {% endif %}
