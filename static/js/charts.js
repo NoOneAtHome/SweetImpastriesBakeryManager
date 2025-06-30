@@ -364,10 +364,10 @@ function createCategorizedChartConfig(processedData, title, hourlyAverage = fals
             maintainAspectRatio: false,
             plugins: {
                 title: {
-                    display: true,
+                    display: false,
                     text: title,
                     font: {
-                        size: 16,
+                        size: 12,
                         weight: 'bold'
                     },
                     color: '#667eea'
@@ -437,8 +437,11 @@ function createCategorizedChartConfig(processedData, title, hourlyAverage = fals
                         tooltipFormat: 'MMM dd, yyyy HH:mm:ss'
                     },
                     title: {
-                        display: true,
-                        text: 'Time (Local)'
+                        display: false,
+                        text: 'Time (Local)',
+                        font: {
+                            size: 10
+                        }
                     }
                 },
                 y: {
@@ -447,7 +450,10 @@ function createCategorizedChartConfig(processedData, title, hourlyAverage = fals
                     title: {
                         display: true,
                         text: 'Temperature (°C)',
-                        color: '#007e15'
+                        color: '#007e15',
+                        font: {
+                            size: 10
+                        }
                     },
                     grid: {
                         drawOnChartArea: true
