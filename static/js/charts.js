@@ -288,6 +288,205 @@ function processMultiSensorDataForChart(multiSensorData) {
         datasets: datasets
     };
 }
+/**
+ * Process multi-sensor data for categorized charts with single y-axis
+ * @param {Object} multiSensorData - Object with sensor data organized by sensor ID
+ * @returns {Object} Processed data ready for Chart.js with single y-axis
+ */
+function processCategorizedSensorDataForChart(multiSensorData) {
+    const datasets = [];
+    const allTimestamps = new Set();
+    
+    // Collect all unique timestamps across all sensors
+    Object.values(multiSensorData).forEach(sensorInfo => {
+        sensorInfo.data.forEach(reading => {
+            // Ensure consistent timestamp parsing
+            let timestamp;
+            if (reading.timestamp.endsWith('Z') || reading.timestamp.includes('+')) {
+                timestamp = reading.timestamp;
+            } else {
+                timestamp = reading.timestamp + 'Z';
+            }
+            allTimestamps.add(timestamp);
+        });
+    });
+    
+    // Sort timestamps and convert to Date objects
+    const sortedTimestamps = Array.from(allTimestamps).sort().map(ts => new Date(ts));
+    
+    // Create datasets for each sensor (no temperature-based separation)
+    let colorIndex = 0;
+    Object.entries(multiSensorData).forEach(([sensorId, sensorInfo]) => {
+        const sensorName = sensorInfo.name || sensorId;
+        const color = SENSOR_COLORS[colorIndex % SENSOR_COLORS.length];
+        
+        // Process all data points for this sensor
+        const dataPoints = [];
+        sensorInfo.data.forEach(reading => {
+            // Ensure timestamp is parsed as UTC and then converted to local time
+            let timestamp;
+            if (reading.timestamp.endsWith('Z') || reading.timestamp.includes('+')) {
+                // Already has timezone info, parse directly
+                timestamp = new Date(reading.timestamp);
+            } else {
+                // Assume UTC if no timezone info
+                timestamp = new Date(reading.timestamp + 'Z');
+            }
+            
+            dataPoints.push({
+                x: timestamp,
+                y: reading.temperature
+            });
+        });
+        
+        // Convert hex color to rgba for background
+        const hexToRgba = (hex, alpha) => {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        };
+        
+        // Create single dataset for this sensor
+        if (dataPoints.length > 0) {
+            datasets.push({
+                label: sensorName,
+                data: dataPoints,
+                borderColor: color,
+                backgroundColor: hexToRgba(color, 0.1),
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1,
+                yAxisID: 'y'
+            });
+        }
+        
+        colorIndex++;
+    });
+    
+    return {
+        labels: sortedTimestamps,
+        datasets: datasets
+    };
+}
+
+/**
+ * Create Chart.js configuration for categorized sensor data with single y-axis
+ * @param {Object} processedData - Processed data from processCategorizedSensorDataForChart
+ * @param {string} title - Chart title
+ * @param {boolean} hourlyAverage - Whether the data is hourly averaged
+ * @returns {Object} Chart.js configuration object
+ */
+function createCategorizedChartConfig(processedData, title, hourlyAverage = false) {
+    return {
+        type: 'line',
+        data: {
+            labels: processedData.labels,
+            datasets: processedData.datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: title,
+                    font: {
+                        size: 16,
+                        weight: 'bold'
+                    },
+                    color: '#667eea'
+                },
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        title: function(context) {
+                            const date = new Date(context[0].parsed.x);
+                            return date.toLocaleString();
+                        },
+                        label: function(context) {
+                            const label = context.dataset.label;
+                            const value = context.parsed.y;
+                            return `${label}: ${value.toFixed(1)}°C`;
+                        }
+                    }
+                },
+                zoom: {
+                    zoom: {
+                        wheel: {
+                            enabled: true,
+                        },
+                        pinch: {
+                            enabled: true
+                        },
+                        mode: 'xy',
+                        scaleMode: 'xy'
+                    },
+                    pan: {
+                        enabled: true,
+                        mode: 'xy',
+                        scaleMode: 'xy'
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    adapters: {
+                        date: {
+                            zone: 'local'  // Force local timezone display
+                        }
+                    },
+                    time: hourlyAverage ? {
+                        unit: 'hour',
+                        displayFormats: {
+                            hour: 'MMM dd HH:00',
+                            day: 'MMM dd',
+                            week: 'MMM dd',
+                            month: 'MMM yyyy'
+                        },
+                        tooltipFormat: 'MMM dd, yyyy HH:00'
+                    } : {
+                        displayFormats: {
+                            minute: 'HH:mm',
+                            hour: 'MMM dd HH:mm',
+                            day: 'MMM dd',
+                            week: 'MMM dd',
+                            month: 'MMM yyyy'
+                        },
+                        tooltipFormat: 'MMM dd, yyyy HH:mm:ss'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Time (Local)'
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Temperature (°C)',
+                        color: '#007e15'
+                    },
+                    grid: {
+                        drawOnChartArea: true
+                    }
+                }
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            }
+        }
+    };
+}
 
 /**
  * Create Chart.js configuration for sensor data
@@ -760,9 +959,9 @@ async function renderAllCategorizedCharts(categorizedSensorIds, timeSlice, hourl
                 continue;
             }
             
-            const processedData = processMultiSensorDataForChart(rawData);
+            const processedData = processCategorizedSensorDataForChart(rawData);
             const title = `${category.charAt(0).toUpperCase() + category.slice(1)} Sensors Temperature`;
-            const config = createChartConfig(processedData, title, hourlyAverage, true);
+            const config = createCategorizedChartConfig(processedData, title, hourlyAverage);
             
             let chartInstance;
             const canvasId = `${category}Chart`;
@@ -844,6 +1043,8 @@ window.handleTimeSliceChange = handleTimeSliceChange;
 window.fetchHistoricalData = fetchHistoricalData;
 window.fetchMultiSensorHistoricalData = fetchMultiSensorHistoricalData;
 window.processMultiSensorDataForChart = processMultiSensorDataForChart;
+window.processCategorizedSensorDataForChart = processCategorizedSensorDataForChart;
+window.createCategorizedChartConfig = createCategorizedChartConfig;
 window.fetchCategorizedSensorHistory = fetchCategorizedSensorHistory;
 window.renderAllCategorizedCharts = renderAllCategorizedCharts;
 window.clearChart = clearChart;
