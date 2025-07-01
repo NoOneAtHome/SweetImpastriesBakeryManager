@@ -364,10 +364,10 @@ function createCategorizedChartConfig(processedData, title, hourlyAverage = fals
             maintainAspectRatio: false,
             plugins: {
                 title: {
-                    display: false,
+                    display: true,
                     text: title,
                     font: {
-                        size: 12,
+                        size: 16,
                         weight: 'bold'
                     },
                     color: '#667eea'

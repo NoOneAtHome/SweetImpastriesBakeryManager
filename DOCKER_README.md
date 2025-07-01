@@ -8,6 +8,7 @@ To build the Docker image for the Bakery Sensors application, run the following 
 
 ```bash
 docker build -t bakery-sensors-app .
+docker save -o bakery-sensors-app.tar bakery-sensors-app   
 ```
 
 This command will create a Docker image tagged as `bakery-sensors-app` using the Dockerfile in the current directory.
