@@ -370,7 +370,7 @@ function createCategorizedChartConfig(processedData, title, hourlyAverage = fals
                         size: 16,
                         weight: 'bold'
                     },
-                    color: '#667eea'
+                    color: '#002B5B'
                 },
                 legend: {
                     display: true,
@@ -516,7 +516,7 @@ function createChartConfig(processedData, title, hourlyAverage = false, isMultiS
                         size: 16,
                         weight: 'bold'
                     },
-                    color: '#667eea'
+                    color: '#002B5B'
                 },
                 legend: {
                     display: true,
