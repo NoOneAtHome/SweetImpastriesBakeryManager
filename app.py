@@ -94,6 +94,11 @@ def create_app(config_name=None, config_class=None, start_polling_service=True):
             # Start the polling service
             if app.polling_service.start():
                 log_info("Polling service started successfully within Flask application", "Flask App Factory")
+                try:
+                    app.polling_service.trigger_immediate_poll()
+                    log_info("Triggered immediate sensor poll on application startup", "Flask App Factory")
+                except Exception as e:
+                    log_warning(f"Failed to trigger immediate poll on startup: {e}", "Flask App Factory")
             else:
                 log_warning("Failed to start polling service within Flask application", "Flask App Factory")
                 
