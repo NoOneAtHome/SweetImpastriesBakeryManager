@@ -25,7 +25,7 @@
             </div>
             {% if sensor.min_temp is not none %}
             <div>
-                <strong>Temp Range:</strong> {{ sensor.min_temp }}°C - {{ sensor.max_temp }}°C
+                <strong>Temp Range:</strong> {{ sensor.min_temp }}°F - {{ sensor.max_temp }}°F
             </div>
             {% endif %}
             {% if sensor.min_humidity is not none %}
@@ -33,6 +33,10 @@
                 <strong>Humidity Range:</strong> {{ sensor.min_humidity }}% - {{ sensor.max_humidity }}%
             </div>
             {% endif %}
+            <div>
+                <strong>Battery Voltage:</strong> {{ latest_reading.battery_voltage | default('N/A') }}V
+            </div>
+
         </div>
     </div>
     
@@ -72,7 +76,7 @@
                 <thead>
                     <tr>
                         <th>Timestamp</th>
-                        <th>Temperature (°C)</th>
+                        <th>Temperature (°F)</th>
                         <th>Humidity (%)</th>
                         <th>Battery Voltage (V)</th>
                     </tr>

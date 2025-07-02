@@ -449,9 +449,19 @@ def register_routes(app):
                 # Handle case where no data is found
                 if not historical_data:
                     log_info(f"No data found for sensor {sensor_id} in time range {start_time} to {end_time}", "API /api/historical_data")
-                    return jsonify([])
+                    return jsonify({
+                        'name': sensor.name,
+                        'min_temp': sensor.min_temp,
+                        'max_temp': sensor.max_temp,
+                        'data': []
+                    })
                 
-                return jsonify(historical_data)
+                return jsonify({
+                    'name': sensor.name,
+                    'min_temp': sensor.min_temp,
+                    'max_temp': sensor.max_temp,
+                    'data': historical_data
+                })
                 
         except Exception as e:
             response, status_code = handle_flask_error(e, "API /api/historical_data")
@@ -609,6 +619,8 @@ def register_routes(app):
                     # Add sensor data to result
                     result[sensor_id] = {
                         'name': sensor.name,
+                        'min_temp': sensor.min_temp,
+                        'max_temp': sensor.max_temp,
                         'data': historical_data
                     }
                 
@@ -780,6 +792,8 @@ def register_routes(app):
                     # Add sensor data to result
                     result[sensor_id] = {
                         'name': sensor.name,
+                        'min_temp': sensor.min_temp,
+                        'max_temp': sensor.max_temp,
                         'data': historical_data
                     }
                 
@@ -881,6 +895,12 @@ def register_routes(app):
                     log_warning(f"Sensor not found: {sensor_id}", "Web Interface")
                     return render_template('error.html', error=f"Sensor {sensor_id} not found"), 404
                 
+                # Get the latest reading for this sensor
+                latest_reading = session.query(SensorReading)\
+                    .filter(SensorReading.sensor_id == sensor_id)\
+                    .order_by(desc(SensorReading.timestamp))\
+                    .first()
+                
                 # Get recent readings (last 24 hours)
                 start_time = datetime.now(UTC) - timedelta(hours=24)
                 readings = session.query(SensorReading)\
@@ -893,7 +913,7 @@ def register_routes(app):
                     .all()
                 
                 log_info(f"Sensor detail loaded for {sensor_id} with {len(readings)} readings", "Web Interface")
-                return render_template('sensor_detail.html', sensor=sensor, readings=readings)
+                return render_template('sensor_detail.html', sensor=sensor, readings=readings, latest_reading=latest_reading)
                 
         except Exception as e:
             log_warning(f"Error loading sensor detail for {sensor_id}: {str(e)}", "Web Interface")
