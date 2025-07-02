@@ -38,10 +38,21 @@ async function fetchHistoricalData(sensorId, startTime = null, endTime = null, h
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        const data = await response.json();
-        console.log(`Fetched ${data.length} data points for sensor ${sensorId}`);
+        const response_data = await response.json();
         
-        return data;
+        // Handle new response structure with min_temp/max_temp
+        if (response_data.data && Array.isArray(response_data.data)) {
+            console.log(`Fetched ${response_data.data.length} data points for sensor ${sensorId}`);
+            // Store min_temp and max_temp for threshold checking
+            response_data.data.min_temp = response_data.min_temp;
+            response_data.data.max_temp = response_data.max_temp;
+            response_data.data.name = response_data.name;
+            return response_data.data;
+        } else {
+            // Fallback for old response structure (array)
+            console.log(`Fetched ${response_data.length} data points for sensor ${sensorId}`);
+            return response_data;
+        }
     } catch (error) {
         console.error('Error fetching historical data:', error);
         throw error;
@@ -214,8 +225,15 @@ function processMultiSensorDataForChart(multiSensorData) {
         const sensorName = sensorInfo.name || sensorId;
         const color = SENSOR_COLORS[colorIndex % SENSOR_COLORS.length];
         
+        // Get temperature thresholds for this sensor
+        const minTemp = sensorInfo.min_temp;
+        const maxTemp = sensorInfo.max_temp;
+        
         // Process all data points for this sensor
         const dataPoints = [];
+        const pointBackgroundColors = [];
+        const pointBorderColors = [];
+        
         sensorInfo.data.forEach(reading => {
             // Ensure timestamp is parsed as UTC and then converted to local time
             let timestamp;
@@ -231,6 +249,18 @@ function processMultiSensorDataForChart(multiSensorData) {
                 x: timestamp,
                 y: reading.temperature
             });
+            
+            // Check if temperature is outside threshold and set point color accordingly
+            const isOutsideThreshold = (minTemp !== null && reading.temperature < minTemp) ||
+                                     (maxTemp !== null && reading.temperature > maxTemp);
+            
+            if (isOutsideThreshold) {
+                pointBackgroundColors.push('#dc3545'); // Red for out-of-threshold
+                pointBorderColors.push('#dc3545');
+            } else {
+                pointBackgroundColors.push(color); // Default sensor color for normal readings
+                pointBorderColors.push(color);
+            }
         });
         
         // Convert hex color to rgba for background
@@ -251,7 +281,10 @@ function processMultiSensorDataForChart(multiSensorData) {
                 borderWidth: 2,
                 fill: false,
                 tension: 0.1,
-                yAxisID: 'y'
+                yAxisID: 'y',
+                pointBackgroundColor: pointBackgroundColors,
+                pointBorderColor: pointBorderColors,
+                pointRadius: 3
             });
         }
         
@@ -295,8 +328,15 @@ function processCategorizedSensorDataForChart(multiSensorData) {
         const sensorName = sensorInfo.name || sensorId;
         const color = SENSOR_COLORS[colorIndex % SENSOR_COLORS.length];
         
+        // Get temperature thresholds for this sensor
+        const minTemp = sensorInfo.min_temp;
+        const maxTemp = sensorInfo.max_temp;
+        
         // Process all data points for this sensor
         const dataPoints = [];
+        const pointBackgroundColors = [];
+        const pointBorderColors = [];
+        
         sensorInfo.data.forEach(reading => {
             // Ensure timestamp is parsed as UTC and then converted to local time
             let timestamp;
@@ -312,6 +352,18 @@ function processCategorizedSensorDataForChart(multiSensorData) {
                 x: timestamp,
                 y: reading.temperature
             });
+            
+            // Check if temperature is outside threshold and set point color accordingly
+            const isOutsideThreshold = (minTemp !== null && reading.temperature < minTemp) ||
+                                     (maxTemp !== null && reading.temperature > maxTemp);
+            
+            if (isOutsideThreshold) {
+                pointBackgroundColors.push('#dc3545'); // Red for out-of-threshold
+                pointBorderColors.push('#dc3545');
+            } else {
+                pointBackgroundColors.push(color); // Default sensor color for normal readings
+                pointBorderColors.push(color);
+            }
         });
         
         // Convert hex color to rgba for background
@@ -332,7 +384,10 @@ function processCategorizedSensorDataForChart(multiSensorData) {
                 borderWidth: 2,
                 fill: false,
                 tension: 0.1,
-                yAxisID: 'y'
+                yAxisID: 'y',
+                pointBackgroundColor: pointBackgroundColors,
+                pointBorderColor: pointBorderColors,
+                pointRadius: 3
             });
         }
         
@@ -387,7 +442,7 @@ function createCategorizedChartConfig(processedData, title, hourlyAverage = fals
                         label: function(context) {
                             const label = context.dataset.label;
                             const value = context.parsed.y;
-                            return `${label}: ${value.toFixed(1)}°C`;
+                            return `${label}: ${value.toFixed(1)}°F`;
                         }
                     }
                 },
@@ -449,7 +504,7 @@ function createCategorizedChartConfig(processedData, title, hourlyAverage = fals
                     position: 'left',
                     title: {
                         display: true,
-                        text: 'Temperature (°C)',
+                        text: 'Temperature (°F)',
                         color: '#007e15',
                         font: {
                             size: 10
@@ -487,7 +542,7 @@ function createChartConfig(processedData, title, hourlyAverage = false, isMultiS
         // Single sensor data - create single dataset
         datasets = [
             {
-                label: 'Temperature (°C)',
+                label: 'Temperature (°F)',
                 data: processedData.temperatureData,
                 borderColor: '#007e15',
                 backgroundColor: 'rgba(0, 126, 21, 0.1)',
@@ -533,7 +588,7 @@ function createChartConfig(processedData, title, hourlyAverage = false, isMultiS
                         label: function(context) {
                             const label = context.dataset.label;
                             const value = context.parsed.y;
-                            return `${label}: ${value.toFixed(1)}°C`;
+                            return `${label}: ${value.toFixed(1)}°F`;
                         }
                     }
                 },
@@ -592,7 +647,7 @@ function createChartConfig(processedData, title, hourlyAverage = false, isMultiS
                     position: 'left',
                     title: {
                         display: true,
-                        text: 'Temperature (°C)',
+                        text: 'Temperature (°F)',
                         color: '#007e15'
                     },
                     grid: {
