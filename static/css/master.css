@@ -454,7 +454,7 @@ header h1 {
 }
 
 .form-group {
-    margin-bottom: 25px;
+    margin-bottom: 15px;
     text-align: left;
 }
 
@@ -784,7 +784,7 @@ input[type="submit"]:hover {
 }
 
 .form-group {
-    margin-bottom: 25px;
+    margin-bottom: 15px;
 }
 
 .form-group label {
@@ -806,7 +806,7 @@ input[type="submit"]:hover {
     font-size: 16px;
     transition: all 0.3s ease;
     background: #ffffff;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+
 }
 
 .form-group input:focus,
@@ -823,29 +823,56 @@ input[type="submit"]:hover {
     gap: 20px;
 }
 
-.threshold-section {
-    background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
-    padding: 25px;
-    border-radius: 15px;
-    margin-bottom: 25px;
-    color: white;
-    box-shadow: 0 4px 15px rgba(116, 185, 255, 0.3);
+.threshold-section,
+.form-section {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    border: 1px solid #dee2e6;
 }
 
-.threshold-section h4 {
-    color: white;
-    margin-bottom: 20px;
-    font-weight: 700;
+.threshold-section h4,
+.form-section h4 {
+    color: #495057;
+    margin-bottom: 12px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-.threshold-section .form-group input {
-    background: rgba(255, 255, 255, 0.9);
-    border: 2px solid rgba(255, 255, 255, 0.3);
+.threshold-section .form-group,
+.form-section .form-group {
+    margin-bottom: 12px;
 }
 
-.threshold-section .form-group input:focus {
+.threshold-section .form-group input,
+.form-section .form-group input,
+.form-section .form-group select {
     background: white;
-    border-color: #667eea;
+    border: 1px solid #ced4da;
+    color: #495057;
+    padding: 8px 12px;
+    font-size: 14px;
+}
+
+.threshold-section .form-group input:focus,
+.form-section .form-group input:focus,
+.form-section .form-group select:focus {
+    background: white;
+    border-color: #002B5B;
+    box-shadow: 0 0 0 0.2rem rgba(0, 43, 91, 0.25);
+}
+
+.threshold-section .form-group label,
+.form-section .form-group label {
+    color: #495057;
+    font-weight: 500;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
 }
 
 .action-buttons {

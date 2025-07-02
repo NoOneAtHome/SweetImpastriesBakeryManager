@@ -46,51 +46,38 @@
                         </span>
                     </div>
 
-                    <!-- Rename Sensor -->
+                    <!-- Sensor Settings Form -->
                     <div class="collapsible">
                         <div class="collapsible-header" onclick="toggleCollapsible(this)">
-                            <span>Rename Sensor</span>
+                            <span>Sensor Settings</span>
                             <span class="collapsible-toggle">▼</span>
                         </div>
                         <div class="collapsible-content">
-                            <form method="POST" action="{{ url_for('manager_sensor_settings') }}">
-                                <input type="hidden" name="sensor_id" value="{{ sensor.sensor_id }}">
-                                <input type="hidden" name="action" value="rename">
-                                <div class="form-group">
-                                    <label for="new_name_{{ sensor.sensor_id }}">New Name</label>
-                                    <input 
-                                        type="text" 
-                                        id="new_name_{{ sensor.sensor_id }}" 
-                                        name="new_name" 
-                                        value="{{ sensor.name }}"
-                                        required
-                                    >
+                            <form method="POST" action="/manager/settings/sensors/{{ sensor.sensor_id }}" id="sensor_form_{{ sensor.sensor_id }}">
+                                <!-- Display Name Section -->
+                                <div class="form-section">
+                                    <div class="form-group">
+                                        <label for="display_name_{{ sensor.sensor_id }}">Display Name</label>
+                                        <input
+                                            type="text"
+                                            id="display_name_{{ sensor.sensor_id }}"
+                                            name="display_name"
+                                            value="{{ sensor.display_name or sensor.name }}"
+                                            required
+                                        >
+                                    </div>
                                 </div>
-                                <button type="submit" class="btn-primary btn-small">Update Name</button>
-                            </form>
-                        </div>
-                    </div>
 
-                    <!-- Threshold Settings -->
-                    <div class="collapsible">
-                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
-                            <span>Threshold Settings</span>
-                            <span class="collapsible-toggle">▼</span>
-                        </div>
-                        <div class="collapsible-content">
-                            <form method="POST" action="{{ url_for('manager_sensor_settings') }}">
-                                <input type="hidden" name="sensor_id" value="{{ sensor.sensor_id }}">
-                                <input type="hidden" name="action" value="update_thresholds">
-                                
+                                <!-- Temperature Thresholds Section -->
                                 <div class="threshold-section">
-                                    <h4>Temperature Thresholds (°C)</h4>
+                                    <h4>Temperature Thresholds (°F)</h4>
                                     <div class="form-row">
                                         <div class="form-group">
                                             <label for="min_temp_{{ sensor.sensor_id }}">Minimum</label>
-                                            <input 
-                                                type="number" 
-                                                id="min_temp_{{ sensor.sensor_id }}" 
-                                                name="min_temp" 
+                                            <input
+                                                type="number"
+                                                id="min_temp_{{ sensor.sensor_id }}"
+                                                name="min_temp"
                                                 value="{{ sensor.min_temp }}"
                                                 step="0.1"
                                                 required
@@ -98,10 +85,10 @@
                                         </div>
                                         <div class="form-group">
                                             <label for="max_temp_{{ sensor.sensor_id }}">Maximum</label>
-                                            <input 
-                                                type="number" 
-                                                id="max_temp_{{ sensor.sensor_id }}" 
-                                                name="max_temp" 
+                                            <input
+                                                type="number"
+                                                id="max_temp_{{ sensor.sensor_id }}"
+                                                name="max_temp"
                                                 value="{{ sensor.max_temp }}"
                                                 step="0.1"
                                                 required
@@ -110,15 +97,16 @@
                                     </div>
                                 </div>
 
+                                <!-- Humidity Thresholds Section -->
                                 <div class="threshold-section">
                                     <h4>Humidity Thresholds (%)</h4>
                                     <div class="form-row">
                                         <div class="form-group">
                                             <label for="min_humidity_{{ sensor.sensor_id }}">Minimum</label>
-                                            <input 
-                                                type="number" 
-                                                id="min_humidity_{{ sensor.sensor_id }}" 
-                                                name="min_humidity" 
+                                            <input
+                                                type="number"
+                                                id="min_humidity_{{ sensor.sensor_id }}"
+                                                name="min_humidity"
                                                 value="{{ sensor.min_humidity }}"
                                                 step="0.1"
                                                 min="0"
@@ -128,10 +116,10 @@
                                         </div>
                                         <div class="form-group">
                                             <label for="max_humidity_{{ sensor.sensor_id }}">Maximum</label>
-                                            <input 
-                                                type="number" 
-                                                id="max_humidity_{{ sensor.sensor_id }}" 
-                                                name="max_humidity" 
+                                            <input
+                                                type="number"
+                                                id="max_humidity_{{ sensor.sensor_id }}"
+                                                name="max_humidity"
                                                 value="{{ sensor.max_humidity }}"
                                                 step="0.1"
                                                 min="0"
@@ -142,31 +130,20 @@
                                     </div>
                                 </div>
 
-                                <button type="submit" class="btn-primary btn-small">Update Thresholds</button>
-                            </form>
-                        </div>
-                    </div>
-
-                    <!-- Category Settings -->
-                    <div class="collapsible">
-                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
-                            <span>Category Settings</span>
-                            <span class="collapsible-toggle">▼</span>
-                        </div>
-                        <div class="collapsible-content">
-                            <form method="POST" action="{{ url_for('manager_sensor_settings') }}">
-                                <input type="hidden" name="sensor_id" value="{{ sensor.sensor_id }}">
-                                <input type="hidden" name="action" value="update_category">
-                                <div class="form-group">
-                                    <label for="category_{{ sensor.sensor_id }}">Category</label>
-                                    <select id="category_{{ sensor.sensor_id }}" name="category" required>
-                                        <option value="">-- Select Category --</option>
-                                        {% for cat in categories %}
-                                            <option value="{{ cat }}" {% if sensor.category == cat %}selected{% endif %}>{{ cat }}</option>
-                                        {% endfor %}
-                                    </select>
+                                <!-- Category Section -->
+                                <div class="form-section">
+                                    <div class="form-group">
+                                        <label for="category_{{ sensor.sensor_id }}">Category</label>
+                                        <select id="category_{{ sensor.sensor_id }}" name="category" required>
+                                            <option value="">-- Select Category --</option>
+                                            {% for cat in categories %}
+                                                <option value="{{ cat }}" {% if sensor.category == cat %}selected{% endif %}>{{ cat }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
                                 </div>
-                                <button type="submit" class="btn-primary btn-small">Update Category</button>
+
+                                <button type="submit" class="btn-primary btn-small">Update Sensor Settings</button>
                             </form>
                         </div>
                     </div>
@@ -210,22 +187,49 @@
 
         // Form validation
         document.addEventListener('DOMContentLoaded', function() {
-            const forms = document.querySelectorAll('form');
+            const sensorForms = document.querySelectorAll('form[id^="sensor_form_"]');
             
-            forms.forEach(form => {
+            sensorForms.forEach(form => {
                 form.addEventListener('submit', function(e) {
-                    const action = form.querySelector('input[name="action"]');
-                    if (!action) return; // Skip forms without action input
+                    // Validate display name
+                    const displayName = form.querySelector('input[name="display_name"]');
+                    if (displayName && displayName.value.trim() === '') {
+                        e.preventDefault();
+                        alert('Display name cannot be empty');
+                        return false;
+                    }
                     
-                    if (action.value === 'update_thresholds') {
-                        const minTemp = parseFloat(form.querySelector('input[name="min_temp"]').value);
-                        const maxTemp = parseFloat(form.querySelector('input[name="max_temp"]').value);
-                        const minHumidity = parseFloat(form.querySelector('input[name="min_humidity"]').value);
-                        const maxHumidity = parseFloat(form.querySelector('input[name="max_humidity"]').value);
+                    // Validate temperature thresholds
+                    const minTempInput = form.querySelector('input[name="min_temp"]');
+                    const maxTempInput = form.querySelector('input[name="max_temp"]');
+                    const minHumidityInput = form.querySelector('input[name="min_humidity"]');
+                    const maxHumidityInput = form.querySelector('input[name="max_humidity"]');
+                    
+                    if (minTempInput && maxTempInput) {
+                        const minTemp = parseFloat(minTempInput.value);
+                        const maxTemp = parseFloat(maxTempInput.value);
+                        
+                        if (isNaN(minTemp) || isNaN(maxTemp)) {
+                            e.preventDefault();
+                            alert('Temperature values must be valid numbers');
+                            return false;
+                        }
                         
                         if (minTemp >= maxTemp) {
                             e.preventDefault();
                             alert('Minimum temperature must be less than maximum temperature');
+                            return false;
+                        }
+                    }
+                    
+                    // Validate humidity thresholds
+                    if (minHumidityInput && maxHumidityInput) {
+                        const minHumidity = parseFloat(minHumidityInput.value);
+                        const maxHumidity = parseFloat(maxHumidityInput.value);
+                        
+                        if (isNaN(minHumidity) || isNaN(maxHumidity)) {
+                            e.preventDefault();
+                            alert('Humidity values must be valid numbers');
                             return false;
                         }
                         
@@ -234,6 +238,20 @@
                             alert('Minimum humidity must be less than maximum humidity');
                             return false;
                         }
+                        
+                        if (minHumidity < 0 || minHumidity > 100 || maxHumidity < 0 || maxHumidity > 100) {
+                            e.preventDefault();
+                            alert('Humidity values must be between 0 and 100');
+                            return false;
+                        }
+                    }
+                    
+                    // Validate category selection
+                    const categorySelect = form.querySelector('select[name="category"]');
+                    if (categorySelect && categorySelect.value === '') {
+                        e.preventDefault();
+                        alert('Please select a category');
+                        return false;
                     }
                 });
             });
