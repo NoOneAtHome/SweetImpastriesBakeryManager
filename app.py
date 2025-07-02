@@ -1203,11 +1203,11 @@ def register_routes(app):
             with get_db_session_context() as db_session:
                 sensors = db_session.query(Sensor).all()
                 
-            return render_template('manager_sensor_settings.html',
-                                 sensors=sensors,
-                                 categories=categories,
-                                 success=request.args.get('success'),
-                                 error=request.args.get('error'))
+                return render_template('manager_sensor_settings.html',
+                                     sensors=sensors,
+                                     categories=categories,
+                                     success=request.args.get('success'),
+                                     error=request.args.get('error'))
                                  
         except Exception as e:
             log_warning(f"Error in sensor settings: {str(e)}", "Manager Settings")

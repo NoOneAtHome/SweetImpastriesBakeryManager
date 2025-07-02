@@ -33,6 +33,11 @@ class Sensor(Base):
     # Relationship to sensor readings
     readings = relationship("SensorReading", back_populates="sensor", cascade="all, delete-orphan")
     
+    @property
+    def display_name(self):
+        """Return the display name for the sensor (currently just the name)."""
+        return self.name
+    
     def __repr__(self):
         return f"<Sensor(sensor_id='{self.sensor_id}', name='{self.name}', active={self.active}, category='{self.category}')>"
 
