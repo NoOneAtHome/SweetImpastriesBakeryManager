@@ -876,6 +876,18 @@ def register_routes(app):
                         .order_by(desc(SensorReading.timestamp))\
                         .first()
                     
+                    # Calculate 4-hour average temperature
+                    four_hours_ago = current_utc_time - timedelta(hours=4)
+                    avg_temp_result = session.query(func.avg(SensorReading.temperature))\
+                        .filter(and_(
+                            SensorReading.sensor_id == sensor.sensor_id,
+                            SensorReading.timestamp >= four_hours_ago
+                        ))\
+                        .scalar()
+                    
+                    # Handle cases where no readings are available within the last 4 hours
+                    average_temp_4h = round(float(avg_temp_result), 2) if avg_temp_result is not None else None
+                    
                     # Check for threshold breaches
                     threshold_info = check_threshold_breach(sensor, latest_reading)
                     
@@ -895,7 +907,8 @@ def register_routes(app):
                         'sensor': sensor,
                         'latest_reading': latest_reading,
                         'threshold_info': threshold_info,
-                        'is_stale': is_stale
+                        'is_stale': is_stale,
+                        'average_temp_4h': average_temp_4h
                     }
                     sensors_with_readings.append(sensor_data)
                 
