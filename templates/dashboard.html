@@ -90,6 +90,16 @@
                             </span>
                         </div>
                         <div class="reading-info">
+                            <span>Avg (4h):</span>
+                            <span class="reading-value temperature-avg">
+                                {% if sensor_data.average_temp_4h is not none %}
+                                    {{ "%.1f"|format(sensor_data.average_temp_4h) }}°F
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="reading-info">
                             <span>Humidity:</span>
                             <span class="reading-value humidity {% if threshold.humidity_breach %}breach-{{ threshold.humidity_breach }}{% endif %}">
                                 {{ "%.1f"|format(sensor_data.latest_reading.humidity) }}%

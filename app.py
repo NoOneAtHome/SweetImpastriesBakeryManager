@@ -962,8 +962,20 @@ def register_routes(app):
                     .limit(100)\
                     .all()
                 
+                # Calculate average temperature for the last 4 hours
+                start_time_4h = datetime.now(UTC) - timedelta(hours=4)
+                avg_temp_result = session.query(func.avg(SensorReading.temperature))\
+                    .filter(and_(
+                        SensorReading.sensor_id == sensor_id,
+                        SensorReading.timestamp >= start_time_4h
+                    ))\
+                    .scalar()
+                
+                # Handle case where no readings exist in the last 4 hours
+                avg_temp_4h = round(avg_temp_result, 2) if avg_temp_result is not None else None
+                
                 log_info(f"Sensor detail loaded for {sensor_id} with {len(readings)} readings", "Web Interface")
-                return render_template('sensor_detail.html', sensor=sensor, readings=readings, latest_reading=latest_reading)
+                return render_template('sensor_detail.html', sensor=sensor, readings=readings, latest_reading=latest_reading, avg_temp_4h=avg_temp_4h)
                 
         except Exception as e:
             log_warning(f"Error loading sensor detail for {sensor_id}: {str(e)}", "Web Interface")
