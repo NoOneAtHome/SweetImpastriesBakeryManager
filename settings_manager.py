@@ -7,7 +7,7 @@ through the manager interface, including polling intervals and other system para
 
 from typing import Optional, Dict, Any
 from database import get_db_session_context
-from models import SystemSettings
+from models import SystemSettings, Sensor
 from error_handling import log_info, log_warning, log_debug
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -147,6 +147,59 @@ class SettingsManager:
             str(minutes),
             f'Polling interval for sensor data collection (minutes)'
         )
+
+    @staticmethod
+    def update_sensor_full_settings(
+        sensor_id: str,
+        display_name: str,
+        min_temp: float,
+        max_temp: float,
+        min_humidity: float,
+        max_humidity: float,
+        category: Optional[str]
+    ) -> bool:
+        """
+        Update a sensor's display name, thresholds, and category in a single operation.
+
+        Args:
+            sensor_id: The ID of the sensor to update.
+            display_name: The new display name for the sensor.
+            min_temp: The new minimum temperature threshold.
+            max_temp: The new maximum temperature threshold.
+            min_humidity: The new minimum humidity threshold.
+            max_humidity: The new maximum humidity threshold.
+            category: The new category for the sensor (can be None).
+
+        Returns:
+            True if the update was successful, False otherwise.
+        """
+        try:
+            with get_db_session_context() as db_session:
+                sensor = db_session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+
+                if not sensor:
+                    log_warning(f"Sensor with ID '{sensor_id}' not found for update.", "SettingsManager.update_sensor_full_settings")
+                    return False
+
+                # Update sensor properties
+                sensor.name = display_name
+                sensor.min_temp = min_temp
+                sensor.max_temp = max_temp
+                sensor.min_humidity = min_humidity
+                sensor.max_humidity = max_humidity
+                sensor.category = category
+
+                db_session.commit()
+                log_info(f"Sensor '{sensor_id}' (name: '{display_name}') settings updated successfully.", "SettingsManager.update_sensor_full_settings")
+                return True
+
+        except SQLAlchemyError as e:
+            log_warning(f"Database error updating sensor '{sensor_id}' settings: {str(e)}", "SettingsManager.update_sensor_full_settings")
+            # Note: db_session.rollback() is handled automatically by the context manager
+            return False
+        except Exception as e:
+            log_warning(f"An unexpected error occurred while updating sensor '{sensor_id}' settings: {str(e)}", "SettingsManager.update_sensor_full_settings")
+            return False
 
 
 def check_threshold_breach(sensor, latest_reading) -> Dict[str, Any]:

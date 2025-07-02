@@ -1041,15 +1041,106 @@ def register_routes(app):
             log_warning(f"Error changing manager PIN: {str(e)}", "Manager Change PIN")
             return redirect(url_for('manager_settings', error="Error changing PIN"))
 
+    @app.route('/manager/settings/sensors/<sensor_id>', methods=['GET', 'POST'])
+    @require_manager_auth
+    def manager_individual_sensor_settings(sensor_id):
+        """
+        Handle sensor configuration settings for a specific sensor.
+        """
+        try:
+            with get_db_session_context() as db_session:
+                sensor = db_session.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
+                if not sensor:
+                    flash(f"Sensor {sensor_id} not found.", 'error')
+                    return redirect(url_for('manager_sensor_settings'))
+
+                if request.method == 'POST':
+                    # Extract data from form
+                    display_name = request.form.get('display_name', '').strip()
+                    min_temp_str = request.form.get('min_temp')
+                    max_temp_str = request.form.get('max_temp')
+                    min_humidity_str = request.form.get('min_humidity')
+                    max_humidity_str = request.form.get('max_humidity')
+                    category = request.form.get('category')
+
+                    # --- Server-side Validation ---
+                    errors = []
+                    if not display_name:
+                        errors.append("Display name cannot be empty.")
+
+                    try:
+                        min_temp = float(min_temp_str)
+                        max_temp = float(max_temp_str)
+                        min_humidity = float(min_humidity_str)
+                        max_humidity = float(max_humidity_str)
+                    except (ValueError, TypeError):
+                        errors.append("Threshold values must be valid numbers.")
+                        min_temp, max_temp, min_humidity, max_humidity = None, None, None, None
+
+                    if min_temp is not None and max_temp is not None:
+                        if min_temp >= max_temp:
+                            errors.append("Minimum temperature must be less than maximum temperature.")
+                    
+                    if min_humidity is not None and max_humidity is not None:
+                        if min_humidity >= max_humidity:
+                            errors.append("Minimum humidity must be less than maximum humidity.")
+                        if not (0 <= min_humidity <= 100):
+                            errors.append("Minimum humidity must be between 0 and 100.")
+                        if not (0 <= max_humidity <= 100):
+                            errors.append("Maximum humidity must be between 0 and 100.")
+
+                    allowed_categories = ["freezer", "refrigerator", "ambient", "other"]
+                    if category and category not in allowed_categories:
+                        errors.append(f"Invalid category: {category}. Allowed categories are {', '.join(allowed_categories)}.")
+                    elif not category:
+                        category = None
+
+                    if errors:
+                        for error_msg in errors:
+                            flash(error_msg, 'error')
+                        # Re-render the page with current sensor data and errors
+                        return render_template('manager_sensor_settings.html',
+                                               sensor=sensor,
+                                               categories=allowed_categories)
+
+                    # Call settings_manager to update all settings
+                    success = SettingsManager.update_sensor_full_settings(
+                        sensor_id=sensor_id,
+                        display_name=display_name,
+                        min_temp=min_temp,
+                        max_temp=max_temp,
+                        min_humidity=min_humidity,
+                        max_humidity=max_humidity,
+                        category=category
+                    )
+
+                    if success:
+                        flash(f"Sensor {sensor.name} settings updated successfully!", 'success')
+                        return redirect(url_for('manager_sensor_settings', sensor_id=sensor_id))
+                    else:
+                        flash(f"Failed to update sensor {sensor.name} settings. Please try again.", 'error')
+                        return redirect(url_for('manager_sensor_settings', sensor_id=sensor_id))
+
+                # GET request - show sensor settings page for a specific sensor
+                categories = ["freezer", "refrigerator", "ambient", "other"]
+                return render_template('manager_sensor_settings.html',
+                                       sensor=sensor,
+                                       categories=categories)
+
+        except Exception as e:
+            log_warning(f"Error in sensor settings for {sensor_id}: {str(e)}", "Manager Settings")
+            flash("An unexpected error occurred.", 'error')
+            return render_template('error.html', error="Failed to load sensor settings"), 500
+
     @app.route('/manager/settings/sensors', methods=['GET', 'POST'])
     @require_manager_auth
     def manager_sensor_settings():
         """
-        Handle sensor configuration settings.
+        Handle sensor configuration settings list and legacy actions.
         """
         try:
             if request.method == 'POST':
-                # Handle sensor updates
+                # Handle legacy sensor updates for backward compatibility
                 sensor_id = request.form.get('sensor_id')
                 action = request.form.get('action')
                 
@@ -1061,60 +1152,12 @@ def register_routes(app):
                     if not sensor:
                         return redirect(url_for('manager_sensor_settings', error="Sensor not found"))
                     
-                    if action == 'rename':
-                        new_name = request.form.get('new_name', '').strip()
-                        if not new_name:
-                            return redirect(url_for('manager_sensor_settings', error="New name is required"))
-                        
-                        sensor.name = new_name
-                        db_session.commit()
-                        log_info(f"Sensor {sensor_id} renamed to '{new_name}'", "Manager Settings")
-                        return redirect(url_for('manager_sensor_settings', success=f"Sensor renamed to '{new_name}'"))
-                    
-                    elif action == 'toggle_active':
+                    if action == 'toggle_active':
                         sensor.active = not sensor.active
                         status = "activated" if sensor.active else "deactivated"
                         db_session.commit()
                         log_info(f"Sensor {sensor_id} {status}", "Manager Settings")
                         return redirect(url_for('manager_sensor_settings', success=f"Sensor {status}"))
-                    
-                    elif action == 'update_thresholds':
-                        try:
-                            min_temp = float(request.form.get('min_temp', 0))
-                            max_temp = float(request.form.get('max_temp', 50))
-                            min_humidity = float(request.form.get('min_humidity', 0))
-                            max_humidity = float(request.form.get('max_humidity', 100))
-                            
-                            # Validate thresholds
-                            if min_temp >= max_temp:
-                                return redirect(url_for('manager_sensor_settings', error="Minimum temperature must be less than maximum"))
-                            if min_humidity >= max_humidity:
-                                return redirect(url_for('manager_sensor_settings', error="Minimum humidity must be less than maximum"))
-                            
-                            sensor.min_temp = min_temp
-                            sensor.max_temp = max_temp
-                            sensor.min_humidity = min_humidity
-                            sensor.max_humidity = max_humidity
-                            db_session.commit()
-                            
-                            log_info(f"Thresholds updated for sensor {sensor_id}", "Manager Settings")
-                            return redirect(url_for('manager_sensor_settings', success="Thresholds updated successfully"))
-                            
-                        except ValueError:
-                            return redirect(url_for('manager_sensor_settings', error="Invalid threshold values"))
-                    
-                    elif action == 'update_category':
-                        new_category = request.form.get('category')
-                        if not new_category:
-                            flash('Category cannot be empty.', 'error')
-                        else:
-                            sensor = db_session.query(Sensor).filter_by(sensor_id=sensor_id).first()
-                            if sensor:
-                                sensor.category = new_category
-                                db_session.commit()
-                                flash(f'Category for {sensor.name} updated successfully!', 'success')
-                            else:
-                                flash('Sensor not found.', 'error')
             
             # GET request - show sensor settings page
             # Define available categories
