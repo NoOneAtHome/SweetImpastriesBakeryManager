@@ -1,0 +1,1 @@
+FLASK_APP=app:create_cli_app

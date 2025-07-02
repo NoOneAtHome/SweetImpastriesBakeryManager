@@ -81,7 +81,7 @@
                         <div class="reading-info">
                             <span>Temperature:</span>
                             <span class="reading-value temperature {% if threshold.temperature_breach %}breach-{{ threshold.temperature_breach }}{% endif %}">
-                                {{ "%.1f"|format(sensor_data.latest_reading.temperature) }}°C
+                                {{ "%.1f"|format(sensor_data.latest_reading.temperature) }}°F
                                 {% if threshold.temperature_breach %}
                                     <span class="breach-indicator">
                                         {% if threshold.temperature_breach == 'high' %}🔥{% else %}❄️{% endif %}

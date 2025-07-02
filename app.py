@@ -25,6 +25,7 @@ from polling_service import PollingService, create_polling_service # Import Poll
 from auth import auth_manager, require_manager_auth, setup_initial_pin_from_args, AuthenticationError, AccountLockoutError
 from settings_manager import SettingsManager, check_threshold_breach
 from sensorpush_api import SensorPushAPI
+from scripts.purge_sensor_data import purge_sensor_data_command
 
 def create_app(config_name=None, config_class=None, start_polling_service=True):
     """
@@ -124,7 +125,43 @@ def create_app(config_name=None, config_class=None, start_polling_service=True):
     # Set up initial manager PIN if needed (checks for MANAGER_PIN env var)
     auth_manager.setup_initial_pin()
     
+    # CLI commands are now registered only in create_cli_app() to avoid background service interference
+    print(f"🔍 DEBUG: Skipping CLI command registration for main app (start_polling_service={start_polling_service})")
+    
     return app
+
+
+def create_cli_app(config_name=None, config_class=None):
+    """
+    Create and configure the Flask application for CLI commands.
+    
+    This version does not start background services to avoid interference
+    with interactive CLI commands.
+    
+    Args:
+        config_name (str, optional): Configuration name to use
+        config_class (class, optional): Configuration class to use directly
+        
+    Returns:
+        Flask: Configured Flask application instance without background services
+    """
+    print("🔍 DEBUG: create_cli_app() called - this will NOT start background services")
+    app = create_app(config_name=config_name, config_class=config_class, start_polling_service=False)
+    
+    # Register CLI commands only on the CLI app to avoid background service interference
+    print("🔍 DEBUG: Registering CLI commands on CLI app (background services disabled)")
+    app.cli.add_command(purge_sensor_data_command)
+    
+    return app
+
+
+def create_default_app():
+    """
+    Default app factory for Flask CLI.
+    Creates app with default configuration and background services enabled.
+    """
+    print("🔍 DEBUG: create_default_app() called - this will START background services")
+    return create_app()
 
 
 def register_routes(app):

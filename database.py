@@ -201,22 +201,28 @@ def get_db_session() -> Session:
 @contextmanager
 def get_db_session_context():
     """
-    Get a database session as a context manager.
+    Get a database session as a context manager with automatic transaction handling.
     
     Yields:
-        Session: A SQLAlchemy session that will be automatically closed
+        Session: A SQLAlchemy session that will be automatically committed on success
+                or rolled back on exception, and closed when exiting the context
         
     Example:
         with get_db_session_context() as session:
             # Use session here
             sensors = session.query(Sensor).all()
-            # Session is automatically closed when exiting the context
+            # Session is automatically committed and closed when exiting the context
+            # If an exception occurs, session is rolled back and closed
     """
     session = SessionLocal()
     try:
         yield session
+        session.commit()  # Commit if no exception occurred
+    except Exception:
+        session.rollback()  # Rollback on any exception
+        raise  # Re-raise the exception
     finally:
-        session.close()
+        session.close()  # Always close the session
 
 
 def close_db_connection():
