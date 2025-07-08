@@ -1,45 +1,116 @@
-# Virtual environment
-.venv
-
-# Python cache files
-__pycache__
-*.pyc
-
-.pytest_cache/
 # Git repository
 .git
+.gitignore
 
-# Log files
-*.log
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# Database directory
-db/
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+.Python
 
-# Test files
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
 tests/
 
 # Documentation
 docs/
+*.md
+README*
 
-# Images
-images/
+# Log files
+*.log
+logs/
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Database files
+db/
+*.sqlite3
+*.db
 
 # Flask session files
 flask_session/
 
-# Other common files to ignore
-.env
-.gitignore
-README.md
-*.md
-.pytest_cache
-.coverage
-htmlcov/
+# Images and media (not needed in container)
+images/
+
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-venv/
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+*.tar
