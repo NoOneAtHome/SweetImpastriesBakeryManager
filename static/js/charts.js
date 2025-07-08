@@ -223,7 +223,9 @@ function processMultiSensorDataForChart(multiSensorData) {
     let colorIndex = 0;
     Object.entries(multiSensorData).forEach(([sensorId, sensorInfo]) => {
         const sensorName = sensorInfo.name || sensorId;
-        const color = SENSOR_COLORS[colorIndex % SENSOR_COLORS.length];
+        // Check if sensorInfo has a custom color, otherwise use default colors
+        const customColor = sensorInfo.color;
+        const color = customColor || SENSOR_COLORS[colorIndex % SENSOR_COLORS.length];
         
         // Get temperature thresholds for this sensor
         const minTemp = sensorInfo.min_temp;
@@ -326,7 +328,9 @@ function processCategorizedSensorDataForChart(multiSensorData) {
     let colorIndex = 0;
     Object.entries(multiSensorData).forEach(([sensorId, sensorInfo]) => {
         const sensorName = sensorInfo.name || sensorId;
-        const color = SENSOR_COLORS[colorIndex % SENSOR_COLORS.length];
+        // Check if sensorInfo has a custom color, otherwise use default colors
+        const customColor = sensorInfo.color;
+        const color = customColor || SENSOR_COLORS[colorIndex % SENSOR_COLORS.length];
         
         // Get temperature thresholds for this sensor
         const minTemp = sensorInfo.min_temp;

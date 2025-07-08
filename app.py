@@ -490,6 +490,7 @@ def register_routes(app):
                         'name': sensor.name,
                         'min_temp': sensor.min_temp,
                         'max_temp': sensor.max_temp,
+                        'color': sensor.color,  # Include sensor color for frontend charting
                         'data': []
                     })
                 
@@ -497,6 +498,7 @@ def register_routes(app):
                     'name': sensor.name,
                     'min_temp': sensor.min_temp,
                     'max_temp': sensor.max_temp,
+                    'color': sensor.color,  # Include sensor color for frontend charting
                     'data': historical_data
                 })
                 
@@ -658,6 +660,7 @@ def register_routes(app):
                         'name': sensor.name,
                         'min_temp': sensor.min_temp,
                         'max_temp': sensor.max_temp,
+                        'color': sensor.color,  # Include sensor color for frontend charting
                         'data': historical_data
                     }
                 
@@ -831,6 +834,7 @@ def register_routes(app):
                         'name': sensor.name,
                         'min_temp': sensor.min_temp,
                         'max_temp': sensor.max_temp,
+                        'color': sensor.color,  # Include sensor color for frontend charting
                         'data': historical_data
                     }
                 
@@ -922,9 +926,19 @@ def register_routes(app):
                 
                 log_info(f"Dashboard loaded with {len(sensors_with_readings)} active sensors", "Web Interface")
                 log_info(f"Categorized sensors: {categorized_sensor_ids}", "Web Interface")
+                # Create sensor info mapping for frontend charting
+                sensor_info_map = {}
+                for sensor in active_sensors:
+                    sensor_info_map[sensor.sensor_id] = {
+                        'name': sensor.name,
+                        'display_name': sensor.display_name,
+                        'color': sensor.color
+                    }
+                
                 return render_template('dashboard.html',
                                      sensors_data=sensors_with_readings,
-                                     categorized_sensor_ids=categorized_sensor_ids)
+                                     categorized_sensor_ids=categorized_sensor_ids,
+                                     sensor_info_map=sensor_info_map)
                 
         except Exception as e:
             log_warning(f"Error loading dashboard: {str(e)}", "Web Interface")
@@ -1173,7 +1187,8 @@ def register_routes(app):
                         max_temp=max_temp,
                         min_humidity=min_humidity,
                         max_humidity=max_humidity,
-                        category=category
+                        category=category,
+                        color=color
                     )
 
                     if success:
@@ -1390,7 +1405,8 @@ def serialize_sensor(sensor):
         'max_temp': sensor.max_temp,
         'min_humidity': sensor.min_humidity,
         'max_humidity': sensor.max_humidity,
-        'category': sensor.category
+        'category': sensor.category,
+        'color': sensor.color
     }
 
 
