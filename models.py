@@ -29,6 +29,7 @@ class Sensor(Base):
     min_humidity = Column(Float, nullable=False)
     max_humidity = Column(Float, nullable=False)
     category = Column(String, nullable=True)  # New field for sensor categorization
+    color = Column(String, nullable=True)  # Color field for sensor visualization
     
     # Relationship to sensor readings
     readings = relationship("SensorReading", back_populates="sensor", cascade="all, delete-orphan")
