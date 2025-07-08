@@ -156,10 +156,11 @@ class SettingsManager:
         max_temp: float,
         min_humidity: float,
         max_humidity: float,
-        category: Optional[str]
+        category: Optional[str],
+        color: Optional[str]
     ) -> bool:
         """
-        Update a sensor's display name, thresholds, and category in a single operation.
+        Update a sensor's display name, thresholds, category, and color in a single operation.
 
         Args:
             sensor_id: The ID of the sensor to update.
@@ -169,6 +170,7 @@ class SettingsManager:
             min_humidity: The new minimum humidity threshold.
             max_humidity: The new maximum humidity threshold.
             category: The new category for the sensor (can be None).
+            color: The new color for the sensor (can be None).
 
         Returns:
             True if the update was successful, False otherwise.
@@ -188,6 +190,7 @@ class SettingsManager:
                 sensor.min_humidity = min_humidity
                 sensor.max_humidity = max_humidity
                 sensor.category = category
+                sensor.color = color
 
                 db_session.commit()
                 log_info(f"Sensor '{sensor_id}' (name: '{display_name}') settings updated successfully.", "SettingsManager.update_sensor_full_settings")

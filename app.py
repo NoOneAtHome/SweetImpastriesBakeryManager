@@ -1138,6 +1138,7 @@ def register_routes(app):
                     min_humidity_str = request.form.get('min_humidity')
                     max_humidity_str = request.form.get('max_humidity')
                     category = request.form.get('category')
+                    color = request.form.get('color')
 
                     # --- Server-side Validation ---
                     errors = []
